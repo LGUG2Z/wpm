@@ -54,26 +54,65 @@ cargo install --git https://github.com/LGUG2Z/wpm wpmctl
 
 # Usage
 
-- Create unit files in `~/.config/wpm` - as an example, here is my `kanata.toml` unit file:
-
-```toml
-[unit]
-name = "kanata"
-
-[service]
-executable = "kanata.exe"
-arguments = ["-c", "$USERPROFILE/minimal.kbd", "--port", "9999"]
-# next one isn't actually in my config, but here as an example ;)
-environment = [["SOME_ENV_VAR", "bla-bla-bla"]]
-```
-
-- The full schema can be found [here](./wpmd/src/unit.rs) and is likely to change during this early development phase
+- Create unit files in `~/.config/wpm` - take a look at the [examples](./examples)
+- The full schema can be found [here](./schema.unit.json) and is likely to change during this early development phase
 - `$USERPROFILE` is a specially handled string in both `arguments` and `environment` which will be replaced with your home dir
 - Run `wpmd` to start the daemon, this will load all unit files in `~/.config/wpm`
-- Run `wpmctl start kanata` (or whatever your unit name is) to start the process
-- Run `wpmctl log kanata` (or whatever your unit name is) to log the output of the process
-- Run `wpmctl stop kanata` (or whatever your unit name is) to stop the process
+- Run `wpmctl start <UNIT>` (or whatever your unit name is) to start the process
+- Run `wpmctl stop <UNIT>` (or whatever your unit name is) to stop the process
 - Run `wpmctl reload` to reload all unit definitions (useful if you're making changes)
+
+## Process Monitoring
+
+- Run `wpmctl log <UNIT>` (or whatever your unit name is) to log the output of the process
+
+```
+❯ wpmctl log whkd
+komorebic focus right
+komorebic focus left
+komorebic focus left
+komorebic focus right
+```
+
+- Run `wpmctl state` to inspect the state of the process manager
+
+```
+❯ wpmctl state
++--------------+-------------------------------------------------+
+| name         | state                                           |
++--------------+-------------------------------------------------+
+| desktop      | Completed: 2024-12-15 13:37:56.826975100 -08:00 |
++--------------+-------------------------------------------------+
+| komorebi-bar | Running: 4144                                   |
++--------------+-------------------------------------------------+
+| whkd         | Running: 38664                                  |
++--------------+-------------------------------------------------+
+| kanata       | Running: 9288                                   |
++--------------+-------------------------------------------------+
+| komorebi     | Running: 22252                                  |
++--------------+-------------------------------------------------+
+| masir        | Stopped                                         |
++--------------+-------------------------------------------------+
+```
+
+- Run `wpmctl status <UNIT>` to inspect the status of a unit
+
+```
+❯ wpmctl status kanata
+Running: 9288
+
+Logs:
+13:38:19.0032 [INFO] You may forcefully exit kanata by pressing lctl+spc+esc at any time. These keys refer to defsrc input, meaning BEFORE kanata remaps keys.
+13:38:19.0032 [INFO] Starting kanata proper
+13:38:18.3738 [INFO] Init: catching only releases and sending immediately
+13:38:18.3737 [INFO] listening for event notifications to relay to connected clients
+13:38:18.3737 [INFO] entering the processing loop
+13:38:16.3723 [INFO] Sleeping for 2s. Please release all keys and don't press additional ones. Run kanata with --help to see how understand more and how to disable this sleep.
+13:38:16.3722 [INFO] Asking Windows to increase process priority
+13:38:16.3722 [INFO] Asking Windows to improve timer precision
+13:38:16.3722 [INFO] config file is valid
+13:38:16.3719 [INFO] NOTE: kanata was compiled to never allow cmd
+```
 
 # Contribution Guidelines
 

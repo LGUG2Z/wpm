@@ -1,0 +1,13 @@
+[unit]
+name = "desktop"
+description = "everything I need to work on Windows"
+requires = ["komorebi"]
+
+[service]
+kind = "Oneshot"
+executable = "msg.exe"
+arguments = [
+    "*",
+    "Desktop recipe completed!",
+]
+autostart = true

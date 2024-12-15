@@ -1,0 +1,7 @@
+[unit]
+name = "whkd"
+description = "simple hotkey daemon for Windows"
+
+[service]
+kind = "Simple"
+executable = "whkd.exe"

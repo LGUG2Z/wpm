@@ -1,0 +1,13 @@
+[unit]
+name = "kanata"
+description = "software keyboard remapper"
+
+[service]
+kind = "Simple"
+executable = "kanata.exe"
+arguments = [
+    "-c",
+    "$USERPROFILE/minimal.kbd",
+    "--port",
+    "9999",
+]
