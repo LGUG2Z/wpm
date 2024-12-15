@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WpmUnit",
+  "type": "object",
+  "required": [
+    "service",
+    "unit"
+  ],
+  "properties": {
+    "service": {
+      "$ref": "#/definitions/Service"
+    },
+    "unit": {
+      "$ref": "#/definitions/Unit"
+    }
+  },
+  "definitions": {
+    "Service": {
+      "type": "object",
+      "required": [
+        "executable"
+      ],
+      "properties": {
+        "arguments": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "environment": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "executable": {
+          "type": "string"
+        },
+        "healthcheck": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ServiceType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shutdown": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ServiceType": {
+      "type": "string",
+      "enum": [
+        "Simple",
+        "Oneshot"
+      ]
+    },
+    "Unit": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "requires": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

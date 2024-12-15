@@ -7,7 +7,12 @@ edition = "2021"
 dirs = { workspace = true }
 parking_lot = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+interprocess = { workspace = true }
 
+schemars = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+tabled = { version = "0.17", features = ["derive"] }
 toml = "0.8"

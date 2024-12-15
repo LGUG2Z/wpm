@@ -2,13 +2,16 @@
 
 use clap::Parser;
 use fs_tail::TailedFile;
-use interprocess::local_socket::traits::Stream as StreamExt;
+use interprocess::local_socket::traits::Listener;
 use interprocess::local_socket::GenericNamespaced;
-use interprocess::local_socket::Stream;
+use interprocess::local_socket::ListenerOptions;
 use interprocess::local_socket::ToNsName;
 use std::fs::File;
 use std::io::BufRead;
-use std::io::Write;
+use std::io::BufReader;
+use std::io::Read;
+use wpm::communication::send_message;
+use wpm::unit::WpmUnit;
 use wpm::SocketMessage;
 
 #[derive(Parser)]
@@ -40,10 +43,18 @@ struct Log {
 
 #[derive(Parser)]
 enum SubCommand {
+    /// Generate a JSON schema for wpm units
+    #[clap(hide = true)]
+    Schemagen,
+    /// Generate some example wpm units
+    #[clap(hide = true)]
+    Examplegen,
     /// Start a unit
     Start(Start),
     /// Stop a unit
     Stop(Stop),
+    /// Show the state of all units
+    State,
     /// Show status of a unit
     Status(Status),
     /// Reload all unit definitions
@@ -52,28 +63,58 @@ enum SubCommand {
     Log(Log),
 }
 
-fn send_message(message: SocketMessage) -> Result<(), Box<dyn std::error::Error>> {
-    let json = serde_json::to_string(&message)?;
-    let name = "wpmd.sock".to_ns_name::<GenericNamespaced>()?;
-    let connection = Stream::connect(name)?;
-    let (_, mut sender) = connection.split();
-    sender.write_all(json.as_bytes())?;
+fn listen_for_response() -> Result<String, Box<dyn std::error::Error>> {
+    let name = "wpmctl.sock".to_ns_name::<GenericNamespaced>()?;
+    let opts = ListenerOptions::new().name(name);
 
-    Ok(())
+    let listener = match opts.create_sync() {
+        Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
+            println!("{error}");
+            return Err(error.into());
+        }
+        x => x?,
+    };
+
+    let mut buf = String::new();
+    let stream = match listener.accept() {
+        Ok(connection) => connection,
+        Err(error) => {
+            println!("{error}");
+            return Err(error.into());
+        }
+    };
+
+    let mut receiver = BufReader::new(&stream);
+
+    receiver.read_to_string(&mut buf)?;
+
+    Ok(buf)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts: Opts = Opts::parse();
     match opts.subcmd {
+        SubCommand::Schemagen => {
+            println!("{}", WpmUnit::schemagen());
+        }
+        SubCommand::Examplegen => {
+            WpmUnit::examplegen();
+        }
         SubCommand::Start(args) => {
-            send_message(SocketMessage::Start(args.unit))?;
+            send_message("wpmd.sock", SocketMessage::Start(args.unit))?;
         }
         SubCommand::Stop(args) => {
-            send_message(SocketMessage::Stop(args.unit))?;
+            send_message("wpmd.sock", SocketMessage::Stop(args.unit))?;
         }
-        SubCommand::Status(_args) => {}
+        SubCommand::Status(args) => {
+            send_message("wpmd.sock", SocketMessage::Status(args.unit))?;
+        }
+        SubCommand::State => {
+            send_message("wpmd.sock", SocketMessage::State)?;
+            println!("{}", listen_for_response()?);
+        }
         SubCommand::Reload => {
-            send_message(SocketMessage::Reload)?;
+            send_message("wpmd.sock", SocketMessage::Reload)?;
         }
         SubCommand::Log(args) => {
             let home = dirs::home_dir().expect("could not find home dir");

@@ -1,9 +1,16 @@
+use crate::unit::ServiceType;
 use crate::unit::WpmUnit;
+use chrono::DateTime;
+use chrono::Local;
+use chrono::Utc;
 use parking_lot::Mutex;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
+use tabled::Table;
+use tabled::Tabled;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -25,12 +32,13 @@ pub enum ProcessManagerError {
 pub struct ProcessManager {
     units: HashMap<String, WpmUnit>,
     running: Arc<Mutex<HashMap<String, u32>>>,
+    completed: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
 }
 
 impl ProcessManager {
     pub fn unit_directory() -> PathBuf {
         let home = dirs::home_dir().expect("could not find home dir");
-        let dir = home.join(".config").join("..");
+        let dir = home.join(".config").join("wpm");
 
         if !dir.is_dir() {
             std::fs::create_dir_all(&dir).expect("could not create ~/.config/wpm");
@@ -43,6 +51,7 @@ impl ProcessManager {
         let mut pm = ProcessManager {
             units: Default::default(),
             running: Arc::new(Default::default()),
+            completed: Arc::new(Default::default()),
         };
 
         pm.load_units()?;
@@ -157,12 +166,18 @@ impl ProcessManager {
         tracing::info!("starting unit: {unit_name}");
 
         let running = self.running.clone();
+        let completed = self.completed.clone();
         let name = unit_name.to_string();
+        let kind = unit.service.kind.unwrap_or_default();
 
         std::thread::spawn(move || {
             match child.wait() {
                 Ok(exit_status) => {
                     if exit_status.success() {
+                        if matches!(kind, ServiceType::Oneshot) {
+                            completed.lock().insert(name.clone(), Utc::now());
+                        }
+
                         tracing::info!("finished unit: {name}");
                     } else {
                         tracing::warn!("killed unit: {name}");
@@ -239,4 +254,67 @@ impl ProcessManager {
 
         Ok(())
     }
+
+    pub fn state(&self) -> State {
+        let mut units = vec![];
+        let running = self.running.lock();
+        let completed = self.completed.lock();
+
+        for name in self.units.keys() {
+            if let Some(pid) = running.get(name) {
+                units.push(UnitStatus {
+                    name: name.clone(),
+                    state: UnitState::Running(*pid),
+                })
+            } else if let Some(timestamp) = completed.get(name) {
+                units.push(UnitStatus {
+                    name: name.clone(),
+                    state: UnitState::Completed(*timestamp),
+                })
+            } else {
+                units.push(UnitStatus {
+                    name: name.clone(),
+                    state: UnitState::Stopped,
+                })
+            }
+        }
+
+        State(units)
+    }
+}
+
+pub struct State(Vec<UnitStatus>);
+
+impl State {
+    pub fn as_table(&self) -> String {
+        Table::new(&self.0).to_string()
+    }
+}
+
+#[derive(Tabled)]
+pub enum UnitState {
+    Running(u32),
+    Stopped,
+    Completed(DateTime<Utc>),
+    Failed(u32),
+}
+
+impl Display for UnitState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnitState::Running(pid) => write!(f, "Running: {pid}"),
+            UnitState::Stopped => write!(f, "Stopped"),
+            UnitState::Completed(timestamp) => {
+                let local: DateTime<Local> = DateTime::from(*timestamp);
+                write!(f, "Completed: {local}")
+            }
+            UnitState::Failed(exit_code) => write!(f, "Failed: {exit_code}"),
+        }
+    }
+}
+
+#[derive(Tabled)]
+pub struct UnitStatus {
+    name: String,
+    state: UnitState,
 }

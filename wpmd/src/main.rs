@@ -11,6 +11,7 @@ use std::io::BufReader;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing_subscriber::EnvFilter;
+use wpm::communication::send_str;
 use wpm::process_manager::ProcessManager;
 use wpm::process_manager::ProcessManagerError;
 use wpm::SocketMessage;
@@ -74,11 +75,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let pm = loop_arc.clone();
 
-        std::thread::spawn(move || {
-            if let Err(error) = handle_connection(pm, conn) {
-                tracing::error!("{error}");
-            }
-        });
+        if let Err(error) = handle_connection(pm, conn) {
+            tracing::error!("{error}");
+        }
     });
 
     let (ctrlc_sender, ctrlc_receiver) = std::sync::mpsc::channel();
@@ -98,23 +97,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn handle_connection(pm: Arc<Mutex<ProcessManager>>, conn: Stream) -> Result<(), WpmdError> {
-    let mut receiver = BufReader::new(&conn);
+    let mut conn = BufReader::new(&conn);
     let mut buf = String::new();
-    receiver.read_line(&mut buf)?;
-    let socket_message: SocketMessage = serde_json::from_str(&buf)?;
-
-    let mut pm = pm.lock();
-
-    match socket_message {
-        SocketMessage::Start(arg) => {
-            pm.start(&arg)?;
+    conn.read_line(&mut buf)?;
+    match serde_json::from_str::<SocketMessage>(&buf) {
+        Err(error) => {
+            tracing::error!("{error}");
         }
-        SocketMessage::Stop(arg) => {
-            pm.stop(&arg)?;
-        }
-        SocketMessage::Status(_arg) => {}
-        SocketMessage::Reload => {
-            pm.load_units()?;
+        Ok(socket_message) => {
+            tracing::info!("received socket message: {socket_message:?}");
+
+            let mut pm = pm.lock();
+
+            match socket_message {
+                SocketMessage::Start(arg) => {
+                    pm.start(&arg)?;
+                }
+                SocketMessage::Stop(arg) => {
+                    pm.stop(&arg)?;
+                }
+                SocketMessage::Status(arg) => {}
+                SocketMessage::State => {
+                    let table = format!("{}\n", pm.state().as_table());
+                    send_str("wpmctl.sock", &table)?;
+                }
+                SocketMessage::Reload => {
+                    pm.load_units()?;
+                }
+            }
         }
     }
 

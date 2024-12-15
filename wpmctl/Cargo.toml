@@ -9,7 +9,5 @@ wpm = { path = "../wpm" }
 clap = { workspace = true }
 dirs = { workspace = true }
 interprocess = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
 
 fs-tail = "0.1"

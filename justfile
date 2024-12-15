@@ -34,3 +34,6 @@ debug target $RUST_LOG="debug":
 
 trace target $RUST_LOG="trace":
     just run {{ target }}
+
+jsonschema:
+    cargo +stable run --bin wpmctl --locked -- schemagen >schema.unit.json
