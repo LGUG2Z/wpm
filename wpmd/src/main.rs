@@ -1,22 +1,19 @@
 #![warn(clippy::all)]
 
-use crate::process_manager::ProcessManager;
-use crate::process_manager::ProcessManagerError;
-use interprocess::local_socket::tokio::Stream;
-use interprocess::local_socket::traits::tokio::Listener;
+use interprocess::local_socket::traits::Listener;
 use interprocess::local_socket::GenericNamespaced;
 use interprocess::local_socket::ListenerOptions;
+use interprocess::local_socket::Stream;
 use interprocess::local_socket::ToNsName;
+use parking_lot::Mutex;
+use std::io::BufRead;
+use std::io::BufReader;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::io::AsyncBufReadExt;
-use tokio::io::BufReader;
-use tokio::sync::Mutex;
 use tracing_subscriber::EnvFilter;
-use wpmc::SocketMessage;
-
-mod process_manager;
-mod unit;
+use wpm::process_manager::ProcessManager;
+use wpm::process_manager::ProcessManagerError;
+use wpm::SocketMessage;
 
 static SOCKET_NAME: &str = "wpmd.sock";
 
@@ -30,8 +27,7 @@ pub enum WpmdError {
     Io(#[from] std::io::Error),
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var("RUST_LIB_BACKTRACE").is_err() {
         std::env::set_var("RUST_LIB_BACKTRACE", "1");
     }
@@ -57,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let name = SOCKET_NAME.to_ns_name::<GenericNamespaced>()?;
     let opts = ListenerOptions::new().name(name);
 
-    let listener = match opts.create_tokio() {
+    let listener = match opts.create_sync() {
         Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
             tracing::error!("{error}");
             return Err(error.into());
@@ -67,24 +63,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("listening on {SOCKET_NAME}");
 
-    tokio::spawn(async move {
-        loop {
-            let conn = match listener.accept().await {
-                Ok(connection) => connection,
-                Err(error) => {
-                    tracing::error!("{error}");
-                    continue;
-                }
-            };
+    std::thread::spawn(move || loop {
+        let conn = match listener.accept() {
+            Ok(connection) => connection,
+            Err(error) => {
+                tracing::error!("{error}");
+                continue;
+            }
+        };
 
-            let pm = loop_arc.clone();
+        let pm = loop_arc.clone();
 
-            tokio::spawn(async move {
-                if let Err(error) = handle_connection(pm, conn).await {
-                    tracing::error!("{error}");
-                }
-            });
-        }
+        std::thread::spawn(move || {
+            if let Err(error) = handle_connection(pm, conn) {
+                tracing::error!("{error}");
+            }
+        });
     });
 
     let (ctrlc_sender, ctrlc_receiver) = std::sync::mpsc::channel();
@@ -98,27 +92,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .recv()
         .expect("could not receive signal on ctrl-c channel");
 
-    ctrlc_arc.lock().await.shutdown().await?;
+    ctrlc_arc.lock().shutdown()?;
 
     Ok(())
 }
 
-async fn handle_connection(pm: Arc<Mutex<ProcessManager>>, conn: Stream) -> Result<(), WpmdError> {
+fn handle_connection(pm: Arc<Mutex<ProcessManager>>, conn: Stream) -> Result<(), WpmdError> {
     let mut receiver = BufReader::new(&conn);
     let mut buf = String::new();
-    receiver.read_line(&mut buf).await?;
-
+    receiver.read_line(&mut buf)?;
     let socket_message: SocketMessage = serde_json::from_str(&buf)?;
+
+    let mut pm = pm.lock();
+
     match socket_message {
         SocketMessage::Start(arg) => {
-            pm.lock().await.start(&arg).await?;
+            pm.start(&arg)?;
         }
         SocketMessage::Stop(arg) => {
-            pm.lock().await.stop(&arg).await?;
+            pm.stop(&arg)?;
         }
         SocketMessage::Status(_arg) => {}
         SocketMessage::Reload => {
-            pm.lock().await.load_units()?;
+            pm.load_units()?;
         }
     }
 

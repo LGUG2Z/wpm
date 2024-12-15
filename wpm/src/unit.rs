@@ -1,8 +1,9 @@
 use serde::Deserialize;
 use serde::Serialize;
 use std::fs::File;
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
-use tokio::process::Command;
+use std::process::Command;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct WpmUnit {
@@ -31,7 +32,7 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 impl From<&WpmUnit> for Command {
     fn from(value: &WpmUnit) -> Self {
         let home = dirs::home_dir().expect("could not find home dir");
-        let dir = home.join(".config").join("wpm").join("logs");
+        let dir = home.join(".config").join("..").join("logs");
 
         if !dir.is_dir() {
             std::fs::create_dir_all(&dir).expect("could not create ~/.config/wpm/logs");

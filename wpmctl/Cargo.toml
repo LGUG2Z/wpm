@@ -4,13 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-wpmc = { path = "../wpmc"}
+wpm = { path = "../wpm" }
 
 clap = { workspace = true }
 dirs = { workspace = true }
 interprocess = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tokio = { workspace = true }
 
 fs-tail = "0.1"

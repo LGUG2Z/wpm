@@ -2,14 +2,14 @@
 
 use clap::Parser;
 use fs_tail::TailedFile;
-use interprocess::local_socket::tokio::Stream;
-use interprocess::local_socket::traits::tokio::Stream as StreamExt;
+use interprocess::local_socket::traits::Stream as StreamExt;
 use interprocess::local_socket::GenericNamespaced;
+use interprocess::local_socket::Stream;
 use interprocess::local_socket::ToNsName;
 use std::fs::File;
 use std::io::BufRead;
-use tokio::io::AsyncWriteExt;
-use wpmc::SocketMessage;
+use std::io::Write;
+use wpm::SocketMessage;
 
 #[derive(Parser)]
 #[clap(author, about, version)]
@@ -52,29 +52,28 @@ enum SubCommand {
     Log(Log),
 }
 
-async fn send_message(message: SocketMessage) -> Result<(), Box<dyn std::error::Error>> {
+fn send_message(message: SocketMessage) -> Result<(), Box<dyn std::error::Error>> {
     let json = serde_json::to_string(&message)?;
     let name = "wpmd.sock".to_ns_name::<GenericNamespaced>()?;
-    let connection = Stream::connect(name).await?;
+    let connection = Stream::connect(name)?;
     let (_, mut sender) = connection.split();
-    sender.write_all(json.as_bytes()).await?;
+    sender.write_all(json.as_bytes())?;
 
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts: Opts = Opts::parse();
     match opts.subcmd {
         SubCommand::Start(args) => {
-            send_message(SocketMessage::Start(args.unit)).await?;
+            send_message(SocketMessage::Start(args.unit))?;
         }
         SubCommand::Stop(args) => {
-            send_message(SocketMessage::Stop(args.unit)).await?;
+            send_message(SocketMessage::Stop(args.unit))?;
         }
         SubCommand::Status(_args) => {}
         SubCommand::Reload => {
-            send_message(SocketMessage::Reload).await?;
+            send_message(SocketMessage::Reload)?;
         }
         SubCommand::Log(args) => {
             let home = dirs::home_dir().expect("could not find home dir");

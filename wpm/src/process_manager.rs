@@ -1,9 +1,10 @@
 use crate::unit::WpmUnit;
+use parking_lot::Mutex;
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::process::Command;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::process::Command;
-use tokio::sync::Mutex;
 
 #[derive(Error, Debug)]
 pub enum ProcessManagerError {
@@ -14,7 +15,7 @@ pub enum ProcessManagerError {
     #[error("{0} is not running")]
     NotRunning(String),
     #[error(transparent)]
-    Io(#[from] tokio::io::Error),
+    Io(#[from] std::io::Error),
     #[error(transparent)]
     Toml(#[from] toml::de::Error),
     #[error("{0} did not spawn a process with a handle")]
@@ -27,6 +28,17 @@ pub struct ProcessManager {
 }
 
 impl ProcessManager {
+    pub fn unit_directory() -> PathBuf {
+        let home = dirs::home_dir().expect("could not find home dir");
+        let dir = home.join(".config").join("..");
+
+        if !dir.is_dir() {
+            std::fs::create_dir_all(&dir).expect("could not create ~/.config/wpm");
+        }
+
+        dir
+    }
+
     pub fn init() -> Result<Self, ProcessManagerError> {
         let mut pm = ProcessManager {
             units: Default::default(),
@@ -38,14 +50,7 @@ impl ProcessManager {
     }
 
     pub fn load_units(&mut self) -> Result<(), ProcessManagerError> {
-        let home = dirs::home_dir().expect("could not find home dir");
-        let dir = home.join(".config").join("wpm");
-
-        if !dir.is_dir() {
-            std::fs::create_dir_all(&dir).expect("could not create ~/.config/wpm");
-        }
-
-        let read_dir = std::fs::read_dir(&dir)?;
+        let read_dir = std::fs::read_dir(Self::unit_directory())?;
 
         let mut units = vec![];
 
@@ -90,14 +95,14 @@ impl ProcessManager {
         tracing::info!("registered unit: {name}");
     }
 
-    pub async fn start(&mut self, unit_name: &str) -> Result<(), ProcessManagerError> {
+    pub fn start(&mut self, unit_name: &str) -> Result<(), ProcessManagerError> {
         let unit = self
             .units
             .get(unit_name)
             .cloned()
             .ok_or(ProcessManagerError::UnregisteredUnit(unit_name.to_string()))?;
 
-        if self.running.lock().await.contains_key(unit_name) {
+        if self.running.lock().contains_key(unit_name) {
             return Err(ProcessManagerError::AlreadyRunning(unit_name.to_string()));
         }
 
@@ -107,14 +112,9 @@ impl ProcessManager {
                 ProcessManagerError::UnregisteredUnit(dependency.to_string()),
             )?;
 
-            if !self
-                .running
-                .lock()
-                .await
-                .contains_key(&dependency_unit.unit.name)
-            {
+            if !self.running.lock().contains_key(&dependency_unit.unit.name) {
                 let dependency_name = dependency_unit.unit.name.clone();
-                Box::pin(self.start(&dependency_name)).await?;
+                self.start(&dependency_name)?;
 
                 if let Some(healthcheck) = &dependency_unit.service.healthcheck {
                     tracing::info!("{dependency} has a healthcheck defined: {healthcheck}");
@@ -134,14 +134,14 @@ impl ProcessManager {
                     healthcheck_command.stdout(std::process::Stdio::null());
                     healthcheck_command.stderr(std::process::Stdio::null());
 
-                    let mut status = healthcheck_command.spawn()?.wait().await?;
+                    let mut status = healthcheck_command.spawn()?.wait()?;
 
                     while !status.success() {
                         tracing::warn!(
                             "{dependency} failed its healthcheck command, retrying in 2s"
                         );
-                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                        status = healthcheck_command.spawn()?.wait().await?;
+                        std::thread::sleep(std::time::Duration::from_secs(2));
+                        status = healthcheck_command.spawn()?.wait()?;
                     }
 
                     tracing::info!("{dependency} is healthy");
@@ -151,18 +151,16 @@ impl ProcessManager {
 
         let mut command = Command::from(&unit);
         let mut child = command.spawn()?;
-        let id = child
-            .id()
-            .ok_or(ProcessManagerError::NoHandle(unit_name.to_string()))?;
+        let id = child.id();
 
-        self.running.lock().await.insert(unit_name.to_string(), id);
+        self.running.lock().insert(unit_name.to_string(), id);
         tracing::info!("starting unit: {unit_name}");
 
         let running = self.running.clone();
         let name = unit_name.to_string();
 
-        tokio::spawn(async move {
-            match child.wait().await {
+        std::thread::spawn(move || {
+            match child.wait() {
                 Ok(exit_status) => {
                     if exit_status.success() {
                         tracing::info!("finished unit: {name}");
@@ -175,20 +173,20 @@ impl ProcessManager {
                 }
             }
 
-            running.lock().await.remove(&name);
+            running.lock().remove(&name);
         });
 
         Ok(())
     }
 
-    pub async fn stop(&mut self, unit_name: &str) -> Result<(), ProcessManagerError> {
+    pub fn stop(&mut self, unit_name: &str) -> Result<(), ProcessManagerError> {
         let unit = self
             .units
             .get(unit_name)
             .cloned()
             .ok_or(ProcessManagerError::UnregisteredUnit(unit_name.to_string()))?;
 
-        let running = self.running.lock().await;
+        let running = self.running.lock();
 
         tracing::info!("stopping unit: {unit_name}");
 
@@ -200,8 +198,7 @@ impl ProcessManager {
 
                 Command::new("taskkill")
                     .args(["/F", "/PID", &child.to_string()])
-                    .output()
-                    .await?;
+                    .output()?;
             }
             Some(shutdown) => {
                 tracing::info!("running shutdown command: {shutdown}");
@@ -221,23 +218,23 @@ impl ProcessManager {
                 shutdown_command.stdout(std::process::Stdio::null());
                 shutdown_command.stderr(std::process::Stdio::null());
 
-                shutdown_command.output().await?;
+                shutdown_command.output()?;
             }
         }
 
         Ok(())
     }
 
-    pub async fn shutdown(&mut self) -> Result<(), ProcessManagerError> {
+    pub fn shutdown(&mut self) -> Result<(), ProcessManagerError> {
         tracing::info!("shutting down process manager");
 
         let mut units = vec![];
-        for unit in self.running.lock().await.keys() {
+        for unit in self.running.lock().keys() {
             units.push(unit.clone());
         }
 
         for unit in units {
-            self.stop(&unit).await?;
+            self.stop(&unit)?;
         }
 
         Ok(())
