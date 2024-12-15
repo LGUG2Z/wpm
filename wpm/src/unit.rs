@@ -28,7 +28,7 @@ impl WpmUnit {
                     requires: None,
                 },
                 service: Service {
-                    kind: Some(ServiceType::Simple),
+                    kind: ServiceType::Simple,
                     executable: PathBuf::from("kanata.exe"),
                     arguments: Some(vec![
                         "-c".to_string(),
@@ -39,6 +39,7 @@ impl WpmUnit {
                     environment: None,
                     healthcheck: None,
                     shutdown: None,
+                    autostart: false,
                 },
             },
             Self {
@@ -48,12 +49,13 @@ impl WpmUnit {
                     requires: Some(vec!["komorebi".to_string()]),
                 },
                 service: Service {
-                    kind: Some(ServiceType::Simple),
+                    kind: ServiceType::Simple,
                     executable: PathBuf::from("masir.exe"),
                     arguments: None,
                     environment: None,
                     healthcheck: None,
                     shutdown: None,
+                    autostart: false,
                 },
             },
             Self {
@@ -63,7 +65,7 @@ impl WpmUnit {
                     requires: Some(vec!["whkd".to_string(), "kanata".to_string()]),
                 },
                 service: Service {
-                    kind: Some(ServiceType::Simple),
+                    kind: ServiceType::Simple,
                     executable: PathBuf::from("komorebi.exe"),
                     arguments: Some(vec![
                         "--config".to_string(),
@@ -75,6 +77,7 @@ impl WpmUnit {
                     )]),
                     healthcheck: Some("komorebic state".to_string()),
                     shutdown: Some("komorebic stop".to_string()),
+                    autostart: false,
                 },
             },
             Self {
@@ -84,12 +87,13 @@ impl WpmUnit {
                     requires: None,
                 },
                 service: Service {
-                    kind: Some(ServiceType::Simple),
+                    kind: ServiceType::Simple,
                     executable: PathBuf::from("whkd.exe"),
                     arguments: None,
                     environment: None,
                     healthcheck: None,
                     shutdown: None,
+                    autostart: false,
                 },
             },
             Self {
@@ -99,7 +103,7 @@ impl WpmUnit {
                     requires: Some(vec!["komorebi".to_string()]),
                 },
                 service: Service {
-                    kind: Some(ServiceType::Oneshot),
+                    kind: ServiceType::Oneshot,
                     executable: PathBuf::from("msg.exe"),
                     arguments: Some(vec![
                         "*".to_string(),
@@ -108,6 +112,7 @@ impl WpmUnit {
                     environment: None,
                     healthcheck: None,
                     shutdown: None,
+                    autostart: true,
                 },
             },
         ];
@@ -129,12 +134,15 @@ pub struct Unit {
 #[derive(Serialize, Deserialize, Clone, JsonSchema)]
 pub struct Service {
     #[serde(alias = "type")]
-    pub kind: Option<ServiceType>,
+    #[serde(default)]
+    pub kind: ServiceType,
     pub executable: PathBuf,
     pub arguments: Option<Vec<String>>,
     pub environment: Option<Vec<(String, String)>>,
     pub healthcheck: Option<String>,
     pub shutdown: Option<String>,
+    #[serde(default)]
+    pub autostart: bool,
 }
 
 #[derive(Default, Serialize, Deserialize, Copy, Clone, JsonSchema)]

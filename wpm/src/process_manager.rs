@@ -55,7 +55,26 @@ impl ProcessManager {
         };
 
         pm.load_units()?;
+        pm.autostart()?;
+
         Ok(pm)
+    }
+
+    pub fn autostart(&mut self) -> Result<(), ProcessManagerError> {
+        let mut autostart = vec![];
+
+        for (name, def) in &self.units {
+            if def.service.autostart {
+                autostart.push(name.clone());
+            }
+        }
+
+        for name in &autostart {
+            tracing::info!("autostarting unit: {name}");
+            self.start(name)?;
+        }
+
+        Ok(())
     }
 
     pub fn load_units(&mut self) -> Result<(), ProcessManagerError> {
@@ -168,7 +187,7 @@ impl ProcessManager {
         let running = self.running.clone();
         let completed = self.completed.clone();
         let name = unit_name.to_string();
-        let kind = unit.service.kind.unwrap_or_default();
+        let kind = unit.service.kind;
 
         std::thread::spawn(move || {
             match child.wait() {

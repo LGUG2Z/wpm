@@ -30,6 +30,10 @@
             "type": "string"
           }
         },
+        "autostart": {
+          "default": false,
+          "type": "boolean"
+        },
         "environment": {
           "type": [
             "array",
@@ -59,12 +63,10 @@
           ]
         },
         "kind": {
-          "anyOf": [
+          "default": "Simple",
+          "allOf": [
             {
               "$ref": "#/definitions/ServiceType"
-            },
-            {
-              "type": "null"
             }
           ]
         },
