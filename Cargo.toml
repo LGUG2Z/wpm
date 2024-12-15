@@ -1,0 +1,20 @@
+[workspace]
+
+resolver = "2"
+members = [
+    "wpmc",
+    "wpmctl",
+    "wpmd"
+]
+
+[workspace.dependencies]
+clap = { version = "4", features = ["derive"] }
+color-eyre = "0.6"
+dirs = "5"
+interprocess = { version = "2", features = ["tokio"] }
+serde = { version = "1",  features = ["derive"]}
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
