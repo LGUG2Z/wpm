@@ -116,7 +116,13 @@ fn handle_connection(pm: Arc<Mutex<ProcessManager>>, conn: Stream) -> Result<(),
                 SocketMessage::Stop(arg) => {
                     pm.stop(&arg)?;
                 }
-                SocketMessage::Status(arg) => {}
+                SocketMessage::Status(arg) => {
+                    if let Some(status) = pm.state().unit(&arg) {
+                        send_str("wpmctl.sock", &status.state.to_string())?;
+                    } else {
+                        send_str("wpmctl.sock", &format!("Unregistered unit: {arg}"))?;
+                    }
+                }
                 SocketMessage::State => {
                     let table = format!("{}\n", pm.state().as_table());
                     send_str("wpmctl.sock", &table)?;

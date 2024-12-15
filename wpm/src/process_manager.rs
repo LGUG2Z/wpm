@@ -289,6 +289,10 @@ impl State {
     pub fn as_table(&self) -> String {
         Table::new(&self.0).to_string()
     }
+
+    pub fn unit(&self, unit_name: &str) -> Option<&UnitStatus> {
+        self.0.iter().find(|unit| unit.name == unit_name)
+    }
 }
 
 #[derive(Tabled)]
@@ -315,6 +319,6 @@ impl Display for UnitState {
 
 #[derive(Tabled)]
 pub struct UnitStatus {
-    name: String,
-    state: UnitState,
+    pub name: String,
+    pub state: UnitState,
 }

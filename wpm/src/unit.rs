@@ -30,12 +30,12 @@ impl WpmUnit {
                 service: Service {
                     kind: Some(ServiceType::Simple),
                     executable: PathBuf::from("kanata.exe"),
-                    arguments: Some(
-                        vec!["-c", "$USERPROFILE/minimal.kbd", "--port", "9999"]
-                            .iter()
-                            .map(|s| s.to_string())
-                            .collect::<Vec<_>>(),
-                    ),
+                    arguments: Some(vec![
+                        "-c".to_string(),
+                        "$USERPROFILE/minimal.kbd".to_string(),
+                        "--port".to_string(),
+                        "9999".to_string(),
+                    ]),
                     environment: None,
                     healthcheck: None,
                     shutdown: None,
@@ -114,7 +114,7 @@ impl WpmUnit {
 
         for example in examples {
             println!("# {}.toml", example.unit.name);
-            println!("{}", toml::to_string_pretty(&example).unwrap().to_string())
+            println!("{}", toml::to_string_pretty(&example).unwrap())
         }
     }
 }
@@ -149,7 +149,7 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 impl From<&WpmUnit> for Command {
     fn from(value: &WpmUnit) -> Self {
         let home = dirs::home_dir().expect("could not find home dir");
-        let dir = home.join(".config").join("..").join("logs");
+        let dir = home.join(".config").join("wpm").join("logs");
 
         if !dir.is_dir() {
             std::fs::create_dir_all(&dir).expect("could not create ~/.config/wpm/logs");
