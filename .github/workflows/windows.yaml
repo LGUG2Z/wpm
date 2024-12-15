@@ -1,0 +1,152 @@
+name: Windows
+
+on:
+  pull_request:
+    branches:
+      - "*"
+  push:
+    branches:
+      - master
+      - feature/*
+      - hotfix/*
+    tags:
+      - v*
+  schedule:
+    - cron: "30 0 * * 0" # Every day at 00:30 UTC
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        platform:
+          - os-name: Windows-x86_64
+            runs-on: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os-name: Windows-aarch64
+            runs-on: windows-latest
+            target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.platform.runs-on }}
+    permissions: write-all
+    env:
+      RUSTFLAGS: -Ctarget-feature=+crt-static -Dwarnings
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: rustup toolchain install stable --profile minimal
+      - run: rustup toolchain install nightly --allow-downgrade -c rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: "true"
+          cache-all-crates: "true"
+          key: ${{ matrix.platform.target }}
+      - run: cargo +nightly fmt --check
+      - run: cargo clippy
+      - uses: houseabsolute/actions-rust-cross@v0
+        with:
+          command: "build"
+          target: ${{ matrix.platform.target }}
+          args: "--locked --release"
+      - run: |
+          cargo install cargo-wix
+          cargo wix --no-build --nocapture --target ${{ matrix.platform.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wpm-${{ matrix.platform.target }}-${{ github.sha }}
+          path: |
+            target/${{ matrix.platform.target }}/release/*.exe
+            target/${{ matrix.platform.target }}/release/*.pdb
+            target/wix/wpm-*.msi
+          retention-days: 14
+
+  release-dry-run:
+    needs: build
+    runs-on: windows-latest
+    permissions: write-all
+    if: ${{ github.ref == 'refs/heads/master' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - shell: bash
+        run: |
+          TAG=${{ github.ref_name }}
+          echo "VERSION=${TAG#v}" >> $GITHUB_ENV
+      - uses: actions/download-artifact@v4
+      - shell: bash
+        run: ls -R
+      - run: |
+          Compress-Archive -Force ./wpm-x86_64-pc-windows-msvc-${{ github.sha }}/x86_64-pc-windows-msvc/release/*.exe wpm-$Env:VERSION-x86_64-pc-windows-msvc.zip
+          Copy-Item ./wpm-x86_64-pc-windows-msvc-${{ github.sha }}/wix/*x86_64.msi -Destination ./wpm-$Env:VERSION-x86_64.msi
+          echo "$((Get-FileHash wpm-$Env:VERSION-x86_64-pc-windows-msvc.zip).Hash.ToLower())  wpm-$Env:VERSION-x86_64-pc-windows-msvc.zip" >checksums.txt
+
+          Compress-Archive -Force ./wpm-aarch64-pc-windows-msvc-${{ github.sha }}/aarch64-pc-windows-msvc/release/*.exe wpm-$Env:VERSION-aarch64-pc-windows-msvc.zip
+          Copy-Item ./wpm-aarch64-pc-windows-msvc-${{ github.sha }}/wix/*aarch64.msi -Destination ./wpm-$Env:VERSION-aarch64.msi
+          echo "$((Get-FileHash wpm-$Env:VERSION-aarch64-pc-windows-msvc.zip).Hash.ToLower())  wpm-$Env:VERSION-aarch64-pc-windows-msvc.zip" >>checksums.txt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: "true"
+          cache-all-crates: "true"
+      - shell: bash
+        run: |
+          if ! type kokai >/dev/null; then cargo install --locked kokai --force; fi
+          git tag -d nightly || true
+          kokai release --no-emoji --add-links github:commits,issues --ref "${{ github.ref_name }}" >"CHANGELOG.md"
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: "CHANGELOG.md"
+          draft: true
+          files: |
+            checksums.txt
+            *.zip
+            *.msi
+
+  release:
+    needs: build
+    runs-on: windows-latest
+    permissions: write-all
+    if: startsWith(github.ref, 'refs/tags/v')
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - shell: bash
+        run: |
+          TAG=${{ github.ref_name }}
+          echo "VERSION=${TAG#v}" >> $GITHUB_ENV
+      - uses: actions/download-artifact@v4
+      - run: |
+          Compress-Archive -Force ./wpm-x86_64-pc-windows-msvc-${{ github.sha }}/x86_64-pc-windows-msvc/release/*.exe wpm-$Env:VERSION-x86_64-pc-windows-msvc.zip
+          Copy-Item ./wpm-x86_64-pc-windows-msvc-${{ github.sha }}/wix/*x86_64.msi -Destination ./wpm-$Env:VERSION-x86_64.msi
+          echo "$((Get-FileHash wpm-$Env:VERSION-x86_64-pc-windows-msvc.zip).Hash.ToLower())  wpm-$Env:VERSION-x86_64-pc-windows-msvc.zip" >checksums.txt
+
+          Compress-Archive -Force ./wpm-aarch64-pc-windows-msvc-${{ github.sha }}/aarch64-pc-windows-msvc/release/*.exe wpm-$Env:VERSION-aarch64-pc-windows-msvc.zip
+          Copy-Item ./wpm-aarch64-pc-windows-msvc-${{ github.sha }}/wix/*aarch64.msi -Destination ./wpm-$Env:VERSION-aarch64.msi
+          echo "$((Get-FileHash wpm-$Env:VERSION-aarch64-pc-windows-msvc.zip).Hash.ToLower())  wpm-$Env:VERSION-aarch64-pc-windows-msvc.zip" >>checksums.txt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: "true"
+          cache-all-crates: "true"
+      - shell: bash
+        run: |
+          if ! type kokai >/dev/null; then cargo install --locked kokai --force; fi
+          git tag -d nightly || true
+          kokai release --no-emoji --add-links github:commits,issues --ref "$(git tag --points-at HEAD)" >"CHANGELOG.md"
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: "CHANGELOG.md"
+          files: |
+            checksums.txt
+            *.zip
+            *.msi
+
+#      - if: startsWith(github.ref, 'refs/tags/v')
+#        uses: vedantmgoyal2009/winget-releaser@main
+#        with:
+#          identifier: LGUG2Z.wpm
+#          token: ${{ secrets.WINGET_TOKEN }}

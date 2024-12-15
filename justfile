@@ -9,6 +9,7 @@ fmt:
     cargo +nightly fmt
     cargo +stable clippy
     prettier -w README.md
+    prettier -w .github
 
 install-targets *targets:
     "{{ targets }}" -split ' ' | ForEach-Object { just install-target $_ }
