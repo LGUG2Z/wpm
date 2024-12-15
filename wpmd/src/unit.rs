@@ -4,24 +4,26 @@ use std::fs::File;
 use std::path::PathBuf;
 use tokio::process::Command;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct WpmUnit {
     pub unit: Unit,
     pub service: Service,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Unit {
     pub name: String,
     pub description: Option<String>,
     pub requires: Option<Vec<String>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Service {
     pub executable: PathBuf,
     pub arguments: Option<Vec<String>>,
     pub environment: Option<Vec<(String, String)>>,
+    pub healthcheck: Option<String>,
+    pub shutdown: Option<String>,
 }
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
