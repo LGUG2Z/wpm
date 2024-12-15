@@ -10,6 +10,7 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::sync::Arc;
 use thiserror::Error;
+use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::EnvFilter;
 use wpm::communication::send_str;
 use wpm::process_manager::ProcessManager;
@@ -39,10 +40,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::set_var("RUST_LOG", "info");
     }
 
+    let appender = tracing_appender::rolling::daily(std::env::temp_dir(), "wpmd_plaintext.log");
+    let color_appender = tracing_appender::rolling::daily(std::env::temp_dir(), "wpmd.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(appender);
+    let (color_non_blocking, _color_guard) = tracing_appender::non_blocking(color_appender);
+
     tracing::subscriber::set_global_default(
         tracing_subscriber::fmt::Subscriber::builder()
             .with_env_filter(EnvFilter::from_default_env())
-            .finish(),
+            .finish()
+            .with(
+                tracing_subscriber::fmt::Layer::default()
+                    .with_writer(non_blocking)
+                    .with_ansi(false),
+            )
+            .with(
+                tracing_subscriber::fmt::Layer::default()
+                    .with_writer(color_non_blocking)
+                    .with_ansi(true),
+            ),
     )?;
 
     let process_manager = ProcessManager::init()?;

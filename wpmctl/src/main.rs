@@ -1,5 +1,6 @@
 #![warn(clippy::all)]
 
+use chrono::Utc;
 use clap::Parser;
 use fs_tail::TailedFile;
 use interprocess::local_socket::traits::Listener;
@@ -21,24 +22,29 @@ struct Opts {
     subcmd: SubCommand,
 }
 
-#[derive(Parser)]
-struct Start {
-    unit: String,
+macro_rules! gen_unit_subcommands {
+    // SubCommand Pattern
+    ( $( $name:ident ),+ $(,)? ) => {
+        $(
+            #[derive(clap::Parser)]
+            pub struct $name {
+                /// Target unit
+                unit: String,
+            }
+        )+
+    };
 }
 
-#[derive(Parser)]
-struct Stop {
-    unit: String,
-}
-
-#[derive(Parser)]
-struct Status {
-    unit: String,
+gen_unit_subcommands! {
+    Start,
+    Stop,
+    Status,
 }
 
 #[derive(Parser)]
 struct Log {
-    unit: String,
+    /// Target unit
+    unit: Option<String>,
 }
 
 #[derive(Parser)]
@@ -53,13 +59,13 @@ enum SubCommand {
     Start(Start),
     /// Stop a unit
     Stop(Stop),
-    /// Show the state of all units
+    /// Show the state of the process manager
     State,
     /// Show status of a unit
     Status(Status),
     /// Reload all unit definitions
     Reload,
-    /// Tail the logs of a unit
+    /// Tail the logs of a unit or of the process manager
     Log(Log),
 }
 
@@ -123,7 +129,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .lines()
                     .filter(|line| !line.is_empty())
                     .collect::<Vec<_>>();
-                let last_ten_lines = lines.iter().rev().take(10).collect::<Vec<_>>();
+                let last_ten_lines = lines.iter().rev().take(10).rev().collect::<Vec<_>>();
 
                 println!("{}", response);
 
@@ -144,23 +150,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         SubCommand::Reload => {
             send_message("wpmd.sock", SocketMessage::Reload)?;
         }
-        SubCommand::Log(args) => {
-            let home = dirs::home_dir().expect("could not find home dir");
-            let dir = home.join(".config").join("wpm").join("logs");
-
-            if !dir.is_dir() {
-                std::fs::create_dir_all(&dir).expect("could not create ~/.config/wpm/logs");
+        SubCommand::Log(args) => match args.unit {
+            None => {
+                let timestamp = Utc::now().format("%Y-%m-%d").to_string();
+                let color_log = std::env::temp_dir().join(format!("wpmd.log.{timestamp}"));
+                let file = TailedFile::new(File::open(color_log)?);
+                let locked = file.lock();
+                #[allow(clippy::significant_drop_in_scrutinee, clippy::lines_filter_map_ok)]
+                for line in locked.lines().flatten() {
+                    println!("{line}");
+                }
             }
+            Some(unit) => {
+                let home = dirs::home_dir().expect("could not find home dir");
+                let dir = home.join(".config").join("wpm").join("logs");
 
-            let file = File::open(dir.join(format!("{}.log", args.unit))).unwrap();
+                if !dir.is_dir() {
+                    std::fs::create_dir_all(&dir).expect("could not create ~/.config/wpm/logs");
+                }
 
-            let file = TailedFile::new(file);
-            let locked = file.lock();
-            #[allow(clippy::significant_drop_in_scrutinee, clippy::lines_filter_map_ok)]
-            for line in locked.lines().flatten() {
-                println!("{line}");
+                let file = File::open(dir.join(format!("{}.log", unit))).unwrap();
+
+                let file = TailedFile::new(file);
+                let locked = file.lock();
+                #[allow(clippy::significant_drop_in_scrutinee, clippy::lines_filter_map_ok)]
+                for line in locked.lines().flatten() {
+                    println!("{line}");
+                }
             }
-        }
+        },
     }
 
     Ok(())

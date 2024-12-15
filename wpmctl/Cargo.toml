@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 wpm = { path = "../wpm" }
 
+chrono = { workspace = true }
 clap = { workspace = true }
 dirs = { workspace = true }
 interprocess = { workspace = true }
