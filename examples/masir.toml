@@ -5,4 +5,8 @@ requires = ["komorebi"]
 
 [service]
 kind = "Simple"
+autostart = false
 executable = "masir.exe"
+
+[service.healthcheck]
+LivenessSeconds = 1

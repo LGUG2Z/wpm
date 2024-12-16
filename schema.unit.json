@@ -1,6 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "WpmUnit",
+  "title": "Definition",
+  "description": "A wpm definition",
   "type": "object",
   "required": [
     "service",
@@ -8,20 +9,62 @@
   ],
   "properties": {
     "service": {
-      "$ref": "#/definitions/Service"
+      "description": "Information about what this definition executes",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Service"
+        }
+      ]
     },
     "unit": {
-      "$ref": "#/definitions/Unit"
+      "description": "Information about this definition and its dependencies",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Unit"
+        }
+      ]
     }
   },
   "definitions": {
+    "Healthcheck": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "Command"
+          ],
+          "properties": {
+            "Command": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "LivenessSeconds"
+          ],
+          "properties": {
+            "LivenessSeconds": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "Service": {
+      "description": "Information about what a wpm definition executes",
       "type": "object",
       "required": [
         "executable"
       ],
       "properties": {
         "arguments": {
+          "description": "Arguments passed to the executable",
           "type": [
             "array",
             "null"
@@ -31,10 +74,12 @@
           }
         },
         "autostart": {
+          "description": "Autostart this definition with wpmd",
           "default": false,
           "type": "boolean"
         },
         "environment": {
+          "description": "Environment variables for this service definition",
           "type": [
             "array",
             "null"
@@ -54,15 +99,22 @@
           }
         },
         "executable": {
+          "description": "Executable name or absolute path to an executable",
           "type": "string"
         },
         "healthcheck": {
-          "type": [
-            "string",
-            "null"
+          "description": "Healthcheck for this service definition",
+          "default": {
+            "LivenessSeconds": 1
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Healthcheck"
+            }
           ]
         },
         "kind": {
+          "description": "Type of service definition",
           "default": "Simple",
           "allOf": [
             {
@@ -71,6 +123,7 @@
           ]
         },
         "shutdown": {
+          "description": "Shutdown command for this definition (default: taskkill /F /PID <PID>)",
           "type": [
             "string",
             "null"
@@ -86,21 +139,25 @@
       ]
     },
     "Unit": {
+      "description": "Information about a wpm definition and its dependencies",
       "type": "object",
       "required": [
         "name"
       ],
       "properties": {
         "description": {
+          "description": "Description of this definition",
           "type": [
             "string",
             "null"
           ]
         },
         "name": {
+          "description": "Name of this definition, must be unique",
           "type": "string"
         },
         "requires": {
+          "description": "Dependencies of this definition, validated at runtime",
           "type": [
             "array",
             "null"

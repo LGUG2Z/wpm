@@ -12,7 +12,7 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
 use wpm::communication::send_message;
-use wpm::unit::WpmUnit;
+use wpm::unit::Definition;
 use wpm::SocketMessage;
 
 #[derive(Parser)]
@@ -101,10 +101,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts: Opts = Opts::parse();
     match opts.subcmd {
         SubCommand::Schemagen => {
-            println!("{}", WpmUnit::schemagen());
+            println!("{}", Definition::schemagen());
         }
         SubCommand::Examplegen => {
-            WpmUnit::examplegen();
+            Definition::examplegen();
         }
         SubCommand::Start(args) => {
             send_message("wpmd.sock", SocketMessage::Start(args.unit))?;

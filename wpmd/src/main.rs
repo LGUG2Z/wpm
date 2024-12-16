@@ -146,6 +146,9 @@ fn handle_connection(pm: Arc<Mutex<ProcessManager>>, conn: Stream) -> Result<(),
                 SocketMessage::Reload => {
                     pm.load_units()?;
                 }
+                SocketMessage::Reset(arg) => {
+                    pm.reset(&arg);
+                }
             }
         }
     }

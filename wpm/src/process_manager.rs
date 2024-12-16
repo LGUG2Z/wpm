@@ -1,5 +1,4 @@
-use crate::unit::ServiceType;
-use crate::unit::WpmUnit;
+use crate::unit::Definition;
 use chrono::DateTime;
 use chrono::Local;
 use chrono::Utc;
@@ -18,7 +17,13 @@ pub enum ProcessManagerError {
     #[error("{0} is not a registered unit")]
     UnregisteredUnit(String),
     #[error("{0} is already running")]
-    AlreadyRunning(String),
+    RunningUnit(String),
+    #[error("{0} is marked as completed; reset unit before trying again")]
+    CompletedUnit(String),
+    #[error("{0} is marked as failed; reset unit before trying again")]
+    FailedUnit(String),
+    #[error("{0} failed its healthcheck; reset unit before trying again")]
+    FailedHealthcheck(String),
     #[error("{0} is not running")]
     NotRunning(String),
     #[error(transparent)]
@@ -30,9 +35,10 @@ pub enum ProcessManagerError {
 }
 
 pub struct ProcessManager {
-    units: HashMap<String, WpmUnit>,
+    definitions: HashMap<String, Definition>,
     running: Arc<Mutex<HashMap<String, u32>>>,
     completed: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
+    failed: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
 }
 
 impl ProcessManager {
@@ -49,9 +55,10 @@ impl ProcessManager {
 
     pub fn init() -> Result<Self, ProcessManagerError> {
         let mut pm = ProcessManager {
-            units: Default::default(),
+            definitions: Default::default(),
             running: Arc::new(Default::default()),
             completed: Arc::new(Default::default()),
+            failed: Arc::new(Default::default()),
         };
 
         pm.load_units()?;
@@ -63,14 +70,14 @@ impl ProcessManager {
     pub fn autostart(&mut self) -> Result<(), ProcessManagerError> {
         let mut autostart = vec![];
 
-        for (name, def) in &self.units {
+        for (name, def) in &self.definitions {
             if def.service.autostart {
                 autostart.push(name.clone());
             }
         }
 
         for name in &autostart {
-            tracing::info!("autostarting unit: {name}");
+            tracing::info!("{name}: autostarting");
             self.start(name)?;
         }
 
@@ -90,7 +97,7 @@ impl ProcessManager {
         }
 
         for path in units {
-            let mut unit: WpmUnit = toml::from_str(&std::fs::read_to_string(path)?)?;
+            let mut unit: Definition = toml::from_str(&std::fs::read_to_string(path)?)?;
             for arg in unit.service.arguments.iter_mut().flatten() {
                 *arg = arg.replace(
                     "$USERPROFILE",
@@ -117,125 +124,79 @@ impl ProcessManager {
         Ok(())
     }
 
-    pub fn register(&mut self, wpm_unit: WpmUnit) {
-        let name = wpm_unit.unit.name.clone();
-        self.units.insert(wpm_unit.unit.name.clone(), wpm_unit);
-        tracing::info!("registered unit: {name}");
+    pub fn register(&mut self, definition: Definition) {
+        let name = definition.unit.name.clone();
+        self.definitions
+            .insert(definition.unit.name.clone(), definition);
+        tracing::info!("{name}: registered unit");
     }
 
-    pub fn start(&mut self, unit_name: &str) -> Result<(), ProcessManagerError> {
-        let unit = self
-            .units
-            .get(unit_name)
+    pub fn start(&mut self, name: &str) -> Result<u32, ProcessManagerError> {
+        let definition = self
+            .definitions
+            .get(name)
             .cloned()
-            .ok_or(ProcessManagerError::UnregisteredUnit(unit_name.to_string()))?;
+            .ok_or(ProcessManagerError::UnregisteredUnit(name.to_string()))?;
 
-        if self.running.lock().contains_key(unit_name) {
-            return Err(ProcessManagerError::AlreadyRunning(unit_name.to_string()));
+        if self.running.lock().contains_key(name) {
+            return Err(ProcessManagerError::RunningUnit(name.to_string()));
         }
 
-        for dependency in unit.unit.requires.iter().flatten() {
-            tracing::info!("{unit_name} has a dependency on {dependency}");
-            let dependency_unit = self.units.get(dependency).cloned().ok_or(
-                ProcessManagerError::UnregisteredUnit(dependency.to_string()),
-            )?;
+        if self.completed.lock().contains_key(name) {
+            return Err(ProcessManagerError::CompletedUnit(name.to_string()));
+        }
 
-            if !self.running.lock().contains_key(&dependency_unit.unit.name) {
-                let dependency_name = dependency_unit.unit.name.clone();
-                self.start(&dependency_name)?;
+        if self.failed.lock().contains_key(name) {
+            return Err(ProcessManagerError::FailedUnit(name.to_string()));
+        }
 
-                if let Some(healthcheck) = &dependency_unit.service.healthcheck {
-                    tracing::info!("{dependency} has a healthcheck defined: {healthcheck}");
-                    let healthcheck_components = healthcheck.split_whitespace().collect::<Vec<_>>();
-                    let mut healthcheck_command = Command::new(healthcheck_components[0]);
-                    for component in healthcheck_components[1..].iter() {
-                        let component = component.replace(
-                            "$USERPROFILE",
-                            dirs::home_dir()
-                                .expect("could not find home dir")
-                                .to_str()
-                                .unwrap(),
-                        );
-                        healthcheck_command.arg(component);
-                    }
+        for dep in definition.unit.requires.iter().flatten() {
+            tracing::info!("{name}: requires {dep}");
+            let dependency = self
+                .definitions
+                .get(dep)
+                .cloned()
+                .ok_or(ProcessManagerError::UnregisteredUnit(dep.to_string()))?;
 
-                    healthcheck_command.stdout(std::process::Stdio::null());
-                    healthcheck_command.stderr(std::process::Stdio::null());
-
-                    let mut status = healthcheck_command.spawn()?.wait()?;
-
-                    while !status.success() {
-                        tracing::warn!(
-                            "{dependency} failed its healthcheck command, retrying in 2s"
-                        );
-                        std::thread::sleep(std::time::Duration::from_secs(2));
-                        status = healthcheck_command.spawn()?.wait()?;
-                    }
-
-                    tracing::info!("{dependency} is healthy");
-                }
+            if !self.running.lock().contains_key(&dependency.unit.name) {
+                self.start(&dependency.unit.name)?;
             }
         }
 
-        let mut command = Command::from(&unit);
-        let mut child = command.spawn()?;
-        let id = child.id();
+        let id = definition.execute(self.running.clone(), self.completed.clone())?;
 
-        self.running.lock().insert(unit_name.to_string(), id);
-        tracing::info!("starting unit: {unit_name}");
+        definition.healthcheck(id, self.running.clone(), self.failed.clone())?;
 
-        let running = self.running.clone();
-        let completed = self.completed.clone();
-        let name = unit_name.to_string();
-        let kind = unit.service.kind;
-
-        std::thread::spawn(move || {
-            match child.wait() {
-                Ok(exit_status) => {
-                    if exit_status.success() {
-                        if matches!(kind, ServiceType::Oneshot) {
-                            completed.lock().insert(name.clone(), Utc::now());
-                        }
-
-                        tracing::info!("finished unit: {name}");
-                    } else {
-                        tracing::warn!("killed unit: {name}");
-                    }
-                }
-                Err(error) => {
-                    tracing::error!("{error}");
-                }
-            }
-
-            running.lock().remove(&name);
-        });
-
-        Ok(())
+        Ok(id)
     }
 
-    pub fn stop(&mut self, unit_name: &str) -> Result<(), ProcessManagerError> {
+    pub fn stop(&mut self, name: &str) -> Result<(), ProcessManagerError> {
         let unit = self
-            .units
-            .get(unit_name)
+            .definitions
+            .get(name)
             .cloned()
-            .ok_or(ProcessManagerError::UnregisteredUnit(unit_name.to_string()))?;
+            .ok_or(ProcessManagerError::UnregisteredUnit(name.to_string()))?;
 
         let running = self.running.lock();
 
-        tracing::info!("stopping unit: {unit_name}");
+        tracing::info!("{name}: stopping unit");
 
         match unit.service.shutdown {
             None => {
                 let child = *running
-                    .get(unit_name)
-                    .ok_or(ProcessManagerError::NotRunning(unit_name.to_string()))?;
+                    .get(name)
+                    .ok_or(ProcessManagerError::NotRunning(name.to_string()))?;
+
+                tracing::info!(
+                    "{name}: running default shutdown command - taskkill /F /PID {child}"
+                );
 
                 Command::new("taskkill")
                     .args(["/F", "/PID", &child.to_string()])
                     .output()?;
             }
             Some(shutdown) => {
-                tracing::info!("running shutdown command: {shutdown}");
+                tracing::info!("{name}: running shutdown command - {shutdown}");
                 let shutdown_components = shutdown.split_whitespace().collect::<Vec<_>>();
                 let mut shutdown_command = Command::new(shutdown_components[0]);
                 for component in shutdown_components[1..].iter() {
@@ -259,8 +220,14 @@ impl ProcessManager {
         Ok(())
     }
 
+    pub fn reset(&mut self, name: &str) {
+        tracing::info!("{name}: resetting unit");
+        self.completed.lock().remove(name);
+        self.failed.lock().remove(name);
+    }
+
     pub fn shutdown(&mut self) -> Result<(), ProcessManagerError> {
-        tracing::info!("shutting down process manager");
+        tracing::info!("wpmd: shutting down process manager");
 
         let mut units = vec![];
         for unit in self.running.lock().keys() {
@@ -278,8 +245,9 @@ impl ProcessManager {
         let mut units = vec![];
         let running = self.running.lock();
         let completed = self.completed.lock();
+        let failed = self.failed.lock();
 
-        for name in self.units.keys() {
+        for name in self.definitions.keys() {
             if let Some(pid) = running.get(name) {
                 units.push(UnitStatus {
                     name: name.clone(),
@@ -289,6 +257,11 @@ impl ProcessManager {
                 units.push(UnitStatus {
                     name: name.clone(),
                     state: UnitState::Completed(*timestamp),
+                })
+            } else if let Some(timestamp) = failed.get(name) {
+                units.push(UnitStatus {
+                    name: name.clone(),
+                    state: UnitState::Failed(*timestamp),
                 })
             } else {
                 units.push(UnitStatus {
@@ -319,7 +292,7 @@ pub enum UnitState {
     Running(u32),
     Stopped,
     Completed(DateTime<Utc>),
-    Failed(u32),
+    Failed(DateTime<Utc>),
 }
 
 impl Display for UnitState {
@@ -331,7 +304,10 @@ impl Display for UnitState {
                 let local: DateTime<Local> = DateTime::from(*timestamp);
                 write!(f, "Completed: {local}")
             }
-            UnitState::Failed(exit_code) => write!(f, "Failed: {exit_code}"),
+            UnitState::Failed(timestamp) => {
+                let local: DateTime<Local> = DateTime::from(*timestamp);
+                write!(f, "Failed: {local}")
+            }
         }
     }
 }

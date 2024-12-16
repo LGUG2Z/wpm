@@ -4,6 +4,7 @@ description = "software keyboard remapper"
 
 [service]
 kind = "Simple"
+autostart = false
 executable = "kanata.exe"
 arguments = [
     "-c",
@@ -11,3 +12,6 @@ arguments = [
     "--port",
     "9999",
 ]
+
+[service.healthcheck]
+LivenessSeconds = 1

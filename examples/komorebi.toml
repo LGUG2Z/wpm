@@ -8,6 +8,7 @@ requires = [
 
 [service]
 kind = "Simple"
+autostart = false
 executable = "komorebi.exe"
 arguments = [
     "--config",
@@ -17,5 +18,7 @@ environment = [[
     "KOMOREBI_CONFIG_HOME",
     "$USERPROFILE/.config/komorebi",
 ]]
-healthcheck = "komorebic state"
 shutdown = "komorebic stop"
+
+[service.healthcheck]
+Command = "komorebic state"

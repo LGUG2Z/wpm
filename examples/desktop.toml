@@ -5,9 +5,9 @@ requires = ["komorebi"]
 
 [service]
 kind = "Oneshot"
+autostart = true
 executable = "msg.exe"
 arguments = [
     "*",
     "Desktop recipe completed!",
 ]
-autostart = true

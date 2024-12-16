@@ -4,4 +4,8 @@ description = "simple hotkey daemon for Windows"
 
 [service]
 kind = "Simple"
+autostart = false
 executable = "whkd.exe"
+
+[service.healthcheck]
+LivenessSeconds = 1

@@ -16,3 +16,4 @@ schemars = "0.8"
 chrono = { workspace = true }
 tabled = { version = "0.17", features = ["derive"] }
 toml = "0.8"
+sysinfo = "0.33"
