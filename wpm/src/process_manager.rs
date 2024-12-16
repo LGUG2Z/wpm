@@ -1,4 +1,5 @@
 use crate::unit::Definition;
+use crate::unit::ServiceKind;
 use chrono::DateTime;
 use chrono::Local;
 use chrono::Utc;
@@ -6,6 +7,7 @@ use parking_lot::Mutex;
 use shared_child::SharedChild;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::fmt::Formatter;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
@@ -250,26 +252,42 @@ impl ProcessManager {
         let completed = self.completed.lock();
         let failed = self.failed.lock();
 
-        for name in self.definitions.keys() {
+        for (name, def) in &self.definitions {
             if let Some(child) = running.get(name) {
                 units.push(UnitStatus {
                     name: name.clone(),
+                    kind: def.service.kind,
                     state: UnitState::Running(child.id()),
+                    pid: DisplayedOption(Some(child.id())),
+                    timestamp: DisplayedOption(None),
                 })
             } else if let Some(timestamp) = completed.get(name) {
+                let local: DateTime<Local> = DateTime::from(*timestamp);
+
                 units.push(UnitStatus {
                     name: name.clone(),
+                    kind: def.service.kind,
                     state: UnitState::Completed(*timestamp),
+                    pid: DisplayedOption(None),
+                    timestamp: DisplayedOption(Some(local.to_string())),
                 })
             } else if let Some(timestamp) = failed.get(name) {
+                let local: DateTime<Local> = DateTime::from(*timestamp);
+
                 units.push(UnitStatus {
                     name: name.clone(),
+                    kind: def.service.kind,
                     state: UnitState::Failed(*timestamp),
+                    pid: DisplayedOption(None),
+                    timestamp: DisplayedOption(Some(local.to_string())),
                 })
             } else {
                 units.push(UnitStatus {
                     name: name.clone(),
+                    kind: def.service.kind,
                     state: UnitState::Stopped,
+                    pid: DisplayedOption(None),
+                    timestamp: DisplayedOption(None),
                 })
             }
         }
@@ -299,18 +317,12 @@ pub enum UnitState {
 }
 
 impl Display for UnitState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            UnitState::Running(pid) => write!(f, "Running: {pid}"),
+            UnitState::Running(_) => write!(f, "Running"),
             UnitState::Stopped => write!(f, "Stopped"),
-            UnitState::Completed(timestamp) => {
-                let local: DateTime<Local> = DateTime::from(*timestamp);
-                write!(f, "Completed: {local}")
-            }
-            UnitState::Failed(timestamp) => {
-                let local: DateTime<Local> = DateTime::from(*timestamp);
-                write!(f, "Failed: {local}")
-            }
+            UnitState::Completed(_) => write!(f, "Completed"),
+            UnitState::Failed(_) => write!(f, "Failed"),
         }
     }
 }
@@ -318,5 +330,19 @@ impl Display for UnitState {
 #[derive(Tabled)]
 pub struct UnitStatus {
     pub name: String,
+    pub kind: ServiceKind,
     pub state: UnitState,
+    pub pid: DisplayedOption<u32>,
+    pub timestamp: DisplayedOption<String>,
+}
+
+pub struct DisplayedOption<T>(Option<T>);
+
+impl<T: Display> Display for DisplayedOption<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            None => write!(f, ""),
+            Some(inner) => write!(f, "{inner}"),
+        }
+    }
 }

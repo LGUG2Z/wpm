@@ -78,40 +78,40 @@ komorebic focus right
 
 ```
 ❯ wpmctl state
-+--------------+-------------------------------------------------+
-| name         | state                                           |
-+--------------+-------------------------------------------------+
-| desktop      | Completed: 2024-12-15 13:37:56.826975100 -08:00 |
-+--------------+-------------------------------------------------+
-| komorebi-bar | Running: 4144                                   |
-+--------------+-------------------------------------------------+
-| whkd         | Running: 38664                                  |
-+--------------+-------------------------------------------------+
-| kanata       | Running: 9288                                   |
-+--------------+-------------------------------------------------+
-| komorebi     | Running: 22252                                  |
-+--------------+-------------------------------------------------+
-| masir        | Stopped                                         |
-+--------------+-------------------------------------------------+
++--------------+---------+-----------+-------+--------------------------------------+
+| name         | kind    | state     | pid   | timestamp                            |
++--------------+---------+-----------+-------+--------------------------------------+
+| komorebi     | Simple  | Running   | 34304 |                                      |
++--------------+---------+-----------+-------+--------------------------------------+
+| whkd         | Simple  | Running   | 6460  |                                      |
++--------------+---------+-----------+-------+--------------------------------------+
+| komorebi-bar | Simple  | Running   | 37400 |                                      |
++--------------+---------+-----------+-------+--------------------------------------+
+| kanata       | Simple  | Running   | 34204 |                                      |
++--------------+---------+-----------+-------+--------------------------------------+
+| masir        | Simple  | Stopped   |       |                                      |
++--------------+---------+-----------+-------+--------------------------------------+
+| desktop      | Oneshot | Completed |       | 2024-12-15 20:12:36.446380800 -08:00 |
++--------------+---------+-----------+-------+--------------------------------------+
 ```
 
 - Run `wpmctl status <UNIT>` to inspect the status of a unit
 
 ```
 ❯ wpmctl status kanata
-Running: 9288
+Running (44556)
 
 Logs:
-13:38:19.0032 [INFO] You may forcefully exit kanata by pressing lctl+spc+esc at any time. These keys refer to defsrc input, meaning BEFORE kanata remaps keys.
-13:38:19.0032 [INFO] Starting kanata proper
-13:38:18.3738 [INFO] Init: catching only releases and sending immediately
-13:38:18.3737 [INFO] listening for event notifications to relay to connected clients
-13:38:18.3737 [INFO] entering the processing loop
-13:38:16.3723 [INFO] Sleeping for 2s. Please release all keys and don't press additional ones. Run kanata with --help to see how understand more and how to disable this sleep.
-13:38:16.3722 [INFO] Asking Windows to increase process priority
-13:38:16.3722 [INFO] Asking Windows to improve timer precision
-13:38:16.3722 [INFO] config file is valid
-13:38:16.3719 [INFO] NOTE: kanata was compiled to never allow cmd
+20:06:50.4398 [INFO] Asking Windows to increase process priority
+20:06:50.4399 [INFO] Sleeping for 2s. Please release all keys and don't press additional ones. Run kanata with --help to see how understand more and how to disable this sleep.
+20:06:52.4412 [INFO] entering the processing loop
+20:06:52.4413 [INFO] listening for event notifications to relay to connected clients
+20:06:52.4414 [INFO] Init: catching only releases and sending immediately
+20:06:52.5943 [INFO] Init: releasing KEY_C
+20:06:52.6346 [INFO] Init: releasing KEY_T
+20:06:52.8508 [INFO] Init: releasing KEY_L
+20:06:53.0403 [INFO] Starting kanata proper
+20:06:53.0404 [INFO] You may forcefully exit kanata by pressing lctl+spc+esc at any time. These keys refer to defsrc input, meaning BEFORE kanata remaps keys.
 ```
 
 # Contribution Guidelines

@@ -8,6 +8,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use shared_child::SharedChild;
 use std::collections::HashMap;
+use std::fmt::Display;
+use std::fmt::Formatter;
 use std::fs::File;
 use std::os::windows::process::CommandExt;
 use std::path::Path;
@@ -46,7 +48,7 @@ pub struct Service {
     #[serde(alias = "type")]
     #[serde(default)]
     /// Type of service definition
-    pub kind: ServiceType,
+    pub kind: ServiceKind,
     /// Autostart this definition with wpmd
     #[serde(default)]
     pub autostart: bool,
@@ -82,7 +84,7 @@ impl Definition {
         let completed_thread = completed.clone();
         let running_thread = running.clone();
 
-        if matches!(kind, ServiceType::Oneshot) {
+        if matches!(kind, ServiceKind::Oneshot) {
             std::thread::spawn(move || {
                 match thread_child.wait() {
                     Ok(exit_status) => {
@@ -121,7 +123,7 @@ impl Definition {
         let name = self.unit.name.clone();
 
         // we only want to healthcheck long-running services
-        if !matches!(self.service.kind, ServiceType::Simple) {
+        if !matches!(self.service.kind, ServiceKind::Simple) {
             return Ok(());
         }
 
@@ -208,10 +210,19 @@ impl Default for Healthcheck {
 }
 
 #[derive(Default, Serialize, Deserialize, Copy, Clone, JsonSchema)]
-pub enum ServiceType {
+pub enum ServiceKind {
     #[default]
     Simple,
     Oneshot,
+}
+
+impl Display for ServiceKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ServiceKind::Simple => write!(f, "Simple"),
+            ServiceKind::Oneshot => write!(f, "Oneshot"),
+        }
+    }
 }
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -262,7 +273,7 @@ impl Definition {
                     requires: None,
                 },
                 service: Service {
-                    kind: ServiceType::Simple,
+                    kind: ServiceKind::Simple,
                     executable: PathBuf::from("kanata.exe"),
                     arguments: Some(vec![
                         "-c".to_string(),
@@ -283,7 +294,7 @@ impl Definition {
                     requires: Some(vec!["komorebi".to_string()]),
                 },
                 service: Service {
-                    kind: ServiceType::Simple,
+                    kind: ServiceKind::Simple,
                     executable: PathBuf::from("masir.exe"),
                     arguments: None,
                     environment: None,
@@ -299,7 +310,7 @@ impl Definition {
                     requires: Some(vec!["whkd".to_string(), "kanata".to_string()]),
                 },
                 service: Service {
-                    kind: ServiceType::Simple,
+                    kind: ServiceKind::Simple,
                     executable: PathBuf::from("komorebi.exe"),
                     arguments: Some(vec![
                         "--config".to_string(),
@@ -324,7 +335,7 @@ impl Definition {
                     requires: None,
                 },
                 service: Service {
-                    kind: ServiceType::Simple,
+                    kind: ServiceKind::Simple,
                     executable: PathBuf::from("whkd.exe"),
                     arguments: None,
                     environment: None,
@@ -340,7 +351,7 @@ impl Definition {
                     requires: Some(vec!["komorebi".to_string()]),
                 },
                 service: Service {
-                    kind: ServiceType::Oneshot,
+                    kind: ServiceKind::Oneshot,
                     executable: PathBuf::from("msg.exe"),
                     arguments: Some(vec![
                         "*".to_string(),
