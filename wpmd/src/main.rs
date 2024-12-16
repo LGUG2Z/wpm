@@ -9,6 +9,9 @@ use parking_lot::Mutex;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::sync::Arc;
+use sysinfo::Process;
+use sysinfo::ProcessesToUpdate;
+use sysinfo::System;
 use thiserror::Error;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::EnvFilter;
@@ -60,6 +63,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .with_ansi(true),
             ),
     )?;
+
+    {
+        let mut system = System::new_all();
+        system.refresh_processes(ProcessesToUpdate::All, true);
+        let matched_procs: Vec<&Process> = system.processes_by_name("wpmd.exe".as_ref()).collect();
+        if matched_procs.len() > 1 {
+            let mut len = matched_procs.len();
+            for proc in matched_procs {
+                if let Some(executable_path) = proc.exe() {
+                    if executable_path.to_string_lossy().contains("shims") {
+                        len -= 1;
+                    }
+                }
+            }
+
+            if len > 1 {
+                tracing::error!("wpmd.exe is already running, please exit the existing process before starting a new one");
+                std::process::exit(1);
+            }
+        }
+    }
 
     let process_manager = ProcessManager::init()?;
 

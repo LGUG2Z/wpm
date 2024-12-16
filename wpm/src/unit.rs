@@ -6,6 +6,7 @@ use schemars::schema_for;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
+use shared_child::SharedChild;
 use std::collections::HashMap;
 use std::fs::File;
 use std::os::windows::process::CommandExt;
@@ -58,56 +59,62 @@ pub struct Service {
     #[serde(default)]
     /// Healthcheck for this service definition
     pub healthcheck: Healthcheck,
-    /// Shutdown command for this definition (default: taskkill /F /PID <PID>)
-    pub shutdown: Option<String>,
+    /// Shutdown commands for this definition
+    pub shutdown: Option<Vec<String>>,
 }
 
 impl Definition {
     pub fn execute(
         &self,
-        running: Arc<Mutex<HashMap<String, u32>>>,
+        running: Arc<Mutex<HashMap<String, Arc<SharedChild>>>>,
         completed: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
-    ) -> Result<u32, ProcessManagerError> {
-        let mut command = Command::from(self);
-        let mut child = command.spawn()?;
-        let id = child.id();
+    ) -> Result<Arc<SharedChild>, ProcessManagerError> {
         let name = self.unit.name.to_string();
-
         tracing::info!("{name}: starting unit");
+
+        let mut command = Command::from(self);
+        let child = SharedChild::spawn(&mut command)?;
+        let thread_child = Arc::new(child);
+        let state_child = thread_child.clone();
 
         let kind = self.service.kind;
 
         let completed_thread = completed.clone();
         let running_thread = running.clone();
 
-        std::thread::spawn(move || {
-            match child.wait() {
-                Ok(exit_status) => {
-                    if exit_status.success() {
-                        if matches!(kind, ServiceType::Oneshot) {
+        if matches!(kind, ServiceType::Oneshot) {
+            std::thread::spawn(move || {
+                match thread_child.wait() {
+                    Ok(exit_status) => {
+                        if exit_status.success() {
                             completed_thread.lock().insert(name.clone(), Utc::now());
+                            tracing::info!(
+                                "{name}: oneshot unit terminated with successful exit code {}",
+                                exit_status.code().unwrap()
+                            );
+                        } else {
+                            tracing::warn!(
+                                "{name}: oneshot unit terminated with failure exit code {}",
+                                exit_status.code().unwrap()
+                            );
                         }
-
-                        tracing::info!("{name}: finished unit");
-                    } else {
-                        tracing::warn!("{name}: killed unit");
+                    }
+                    Err(error) => {
+                        tracing::error!("{name}: {error}");
                     }
                 }
-                Err(error) => {
-                    tracing::error!("{name}: {error}");
-                }
-            }
 
-            running_thread.lock().remove(&name);
-        });
+                running_thread.lock().remove(&name);
+            });
+        }
 
-        Ok(id)
+        Ok(state_child)
     }
 
     pub fn healthcheck(
         &self,
-        id: u32,
-        running: Arc<Mutex<HashMap<String, u32>>>,
+        child: Arc<SharedChild>,
+        running: Arc<Mutex<HashMap<String, Arc<SharedChild>>>>,
         failed: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
     ) -> Result<(), ProcessManagerError> {
         let mut passed = false;
@@ -161,7 +168,7 @@ impl Definition {
                 tracing::info!("{name}: running liveness healthcheck ({seconds}s)");
                 std::thread::sleep(Duration::from_secs(*seconds));
                 let mut system = System::new_all();
-                let pid = Pid::from_u32(id);
+                let pid = Pid::from_u32(child.id());
                 system.refresh_processes_specifics(
                     ProcessesToUpdate::Some(&[pid]),
                     true,
@@ -177,7 +184,7 @@ impl Definition {
 
         if passed {
             tracing::info!("{name}: passed healthcheck");
-            running.lock().insert(name.clone(), id);
+            running.lock().insert(name.clone(), child);
         } else {
             tracing::warn!("{name}: failed healthcheck");
             failed.lock().insert(name.clone(), Utc::now());
@@ -303,7 +310,10 @@ impl Definition {
                         "$USERPROFILE/.config/komorebi".to_string(),
                     )]),
                     healthcheck: Healthcheck::Command("komorebic state".to_string()),
-                    shutdown: Some("komorebic stop".to_string()),
+                    shutdown: Some(vec![
+                        "komorebic stop".to_string(),
+                        "komorebic restore-windows".to_string(),
+                    ]),
                     autostart: false,
                 },
             },

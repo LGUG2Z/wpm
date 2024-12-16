@@ -4,16 +4,17 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+chrono = { workspace = true }
 dirs = { workspace = true }
+interprocess = { workspace = true }
 parking_lot = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+shared_child = "1"
+sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-interprocess = { workspace = true }
 
 schemars = "0.8"
-chrono = { workspace = true }
 tabled = { version = "0.17", features = ["derive"] }
 toml = "0.8"
-sysinfo = "0.33"

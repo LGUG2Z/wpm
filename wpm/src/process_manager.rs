@@ -3,6 +3,7 @@ use chrono::DateTime;
 use chrono::Local;
 use chrono::Utc;
 use parking_lot::Mutex;
+use shared_child::SharedChild;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::PathBuf;
@@ -36,7 +37,7 @@ pub enum ProcessManagerError {
 
 pub struct ProcessManager {
     definitions: HashMap<String, Definition>,
-    running: Arc<Mutex<HashMap<String, u32>>>,
+    running: Arc<Mutex<HashMap<String, Arc<SharedChild>>>>,
     completed: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
     failed: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
 }
@@ -131,7 +132,7 @@ impl ProcessManager {
         tracing::info!("{name}: registered unit");
     }
 
-    pub fn start(&mut self, name: &str) -> Result<u32, ProcessManagerError> {
+    pub fn start(&mut self, name: &str) -> Result<Arc<SharedChild>, ProcessManagerError> {
         let definition = self
             .definitions
             .get(name)
@@ -165,7 +166,7 @@ impl ProcessManager {
 
         let id = definition.execute(self.running.clone(), self.completed.clone())?;
 
-        definition.healthcheck(id, self.running.clone(), self.failed.clone())?;
+        definition.healthcheck(id.clone(), self.running.clone(), self.failed.clone())?;
 
         Ok(id)
     }
@@ -177,25 +178,18 @@ impl ProcessManager {
             .cloned()
             .ok_or(ProcessManagerError::UnregisteredUnit(name.to_string()))?;
 
-        let running = self.running.lock();
+        let mut running = self.running.lock();
+
+        let child = running
+            .get(name)
+            .ok_or(ProcessManagerError::NotRunning(name.to_string()))?;
+
+        let id = child.id();
 
         tracing::info!("{name}: stopping unit");
 
-        match unit.service.shutdown {
-            None => {
-                let child = *running
-                    .get(name)
-                    .ok_or(ProcessManagerError::NotRunning(name.to_string()))?;
-
-                tracing::info!(
-                    "{name}: running default shutdown command - taskkill /F /PID {child}"
-                );
-
-                Command::new("taskkill")
-                    .args(["/F", "/PID", &child.to_string()])
-                    .output()?;
-            }
-            Some(shutdown) => {
+        if let Some(shutdown_commands) = unit.service.shutdown {
+            for shutdown in shutdown_commands {
                 tracing::info!("{name}: running shutdown command - {shutdown}");
                 let shutdown_components = shutdown.split_whitespace().collect::<Vec<_>>();
                 let mut shutdown_command = Command::new(shutdown_components[0]);
@@ -216,6 +210,15 @@ impl ProcessManager {
                 shutdown_command.output()?;
             }
         }
+
+        tracing::info!("{name}: sending kill signal to {id}");
+
+        child.kill()?;
+        child.wait()?;
+
+        tracing::info!("{name}: process {id} successfully terminated");
+
+        running.remove(name);
 
         Ok(())
     }
@@ -248,10 +251,10 @@ impl ProcessManager {
         let failed = self.failed.lock();
 
         for name in self.definitions.keys() {
-            if let Some(pid) = running.get(name) {
+            if let Some(child) = running.get(name) {
                 units.push(UnitStatus {
                     name: name.clone(),
-                    state: UnitState::Running(*pid),
+                    state: UnitState::Running(child.id()),
                 })
             } else if let Some(timestamp) = completed.get(name) {
                 units.push(UnitStatus {

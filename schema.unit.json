@@ -123,11 +123,14 @@
           ]
         },
         "shutdown": {
-          "description": "Shutdown command for this definition (default: taskkill /F /PID <PID>)",
+          "description": "Shutdown commands for this definition",
           "type": [
-            "string",
+            "array",
             "null"
-          ]
+          ],
+          "items": {
+            "type": "string"
+          }
         }
       }
     },

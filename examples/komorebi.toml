@@ -18,7 +18,10 @@ environment = [[
     "KOMOREBI_CONFIG_HOME",
     "$USERPROFILE/.config/komorebi",
 ]]
-shutdown = "komorebic stop"
+shutdown = [
+    "komorebic stop",
+    "komorebic restore-windows"
+]
 
 [service.healthcheck]
 Command = "komorebic state"
