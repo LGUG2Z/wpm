@@ -123,33 +123,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         SubCommand::Status(args) => {
             send_message("wpmd.sock", SocketMessage::Status(args.unit.clone()))?;
             let response = listen_for_response()?;
-            if !response.contains("Unregistered") {
-                let home = dirs::home_dir().expect("could not find home dir");
-                let dir = home.join(".config").join("wpm").join("logs");
-
-                if !dir.is_dir() {
-                    std::fs::create_dir_all(&dir).expect("could not create ~/.config/wpm/logs");
-                }
-
-                let log = dir.join(format!("{}.log", args.unit));
-                let log_contents = std::fs::read_to_string(log)?;
-                let lines = log_contents
-                    .lines()
-                    .filter(|line| !line.is_empty())
-                    .collect::<Vec<_>>();
-                let last_ten_lines = lines.iter().rev().take(10).rev().collect::<Vec<_>>();
-
-                println!("{}", response);
-
-                if !last_ten_lines.is_empty() {
-                    println!("\nLogs:");
-                    for line in last_ten_lines {
-                        println!("{line}");
-                    }
-                }
-            } else {
-                println!("{}", response);
-            }
+            println!("{}", response);
         }
         SubCommand::State => {
             send_message("wpmd.sock", SocketMessage::State)?;

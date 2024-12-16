@@ -99,19 +99,20 @@ komorebic focus right
 
 ```
 ❯ wpmctl status kanata
-Running (44556)
+● Status of kanata:
+  Kind: Simple
+  State: Running since 2024-12-16 15:46:39.132490800 -08:00
+  PID: 37116
+  Log file: C:\Users\LGUG2Z\.config\wpm\logs\kanata.log
+  Command: kanata.exe -c C:\Users\LGUG2Z\minimal.kbd --port 9999
 
-Logs:
-20:06:50.4398 [INFO] Asking Windows to increase process priority
-20:06:50.4399 [INFO] Sleeping for 2s. Please release all keys and don't press additional ones. Run kanata with --help to see how understand more and how to disable this sleep.
-20:06:52.4412 [INFO] entering the processing loop
-20:06:52.4413 [INFO] listening for event notifications to relay to connected clients
-20:06:52.4414 [INFO] Init: catching only releases and sending immediately
-20:06:52.5943 [INFO] Init: releasing KEY_C
-20:06:52.6346 [INFO] Init: releasing KEY_T
-20:06:52.8508 [INFO] Init: releasing KEY_L
-20:06:53.0403 [INFO] Starting kanata proper
-20:06:53.0404 [INFO] You may forcefully exit kanata by pressing lctl+spc+esc at any time. These keys refer to defsrc input, meaning BEFORE kanata remaps keys.
+Recent logs:
+  15:46:38.0790 [INFO] Sleeping for 2s. Please release all keys and don't press additional ones. Run kanata with --help to see how understand more and how to disable this sleep.
+  15:46:40.0807 [INFO] entering the processing loop
+  15:46:40.0808 [INFO] listening for event notifications to relay to connected clients
+  15:46:40.0808 [INFO] Init: catching only releases and sending immediately
+  15:46:40.6899 [INFO] Starting kanata proper
+  15:46:40.6900 [INFO] You may forcefully exit kanata by pressing lctl+spc+esc at any time. These keys refer to defsrc input, meaning BEFORE kanata remaps keys.
 ```
 
 # Contribution Guidelines

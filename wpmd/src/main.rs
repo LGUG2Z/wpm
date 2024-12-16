@@ -1,7 +1,5 @@
 #![warn(clippy::all)]
 
-use chrono::DateTime;
-use chrono::Local;
 use interprocess::local_socket::traits::Listener;
 use interprocess::local_socket::GenericNamespaced;
 use interprocess::local_socket::ListenerOptions;
@@ -20,7 +18,6 @@ use tracing_subscriber::EnvFilter;
 use wpm::communication::send_str;
 use wpm::process_manager::ProcessManager;
 use wpm::process_manager::ProcessManagerError;
-use wpm::process_manager::UnitState;
 use wpm::SocketMessage;
 
 static SOCKET_NAME: &str = "wpmd.sock";
@@ -164,25 +161,8 @@ fn handle_connection(pm: Arc<Mutex<ProcessManager>>, conn: Stream) -> Result<(),
                     }
                 }
                 SocketMessage::Status(arg) => {
-                    if let Some(status) = pm.state().unit(&arg) {
-                        let status_message = match status.state {
-                            UnitState::Running(pid) => {
-                                format!("Running ({pid})")
-                            }
-                            UnitState::Stopped => "Stopped".to_string(),
-                            UnitState::Completed(timestamp) => {
-                                let local: DateTime<Local> = DateTime::from(timestamp);
-                                format!("Completed at {local}")
-                            }
-                            UnitState::Failed(timestamp) => {
-                                let local: DateTime<Local> = DateTime::from(timestamp);
-                                format!("Failed at {local}")
-                            }
-                        };
-                        send_str("wpmctl.sock", &status_message)?;
-                    } else {
-                        send_str("wpmctl.sock", &format!("Unregistered unit: {arg}"))?;
-                    }
+                    let status_message = pm.state().unit_status(&arg)?;
+                    send_str("wpmctl.sock", &status_message)?;
                 }
                 SocketMessage::State => {
                     let table = format!("{}\n", pm.state().as_table());

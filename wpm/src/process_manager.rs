@@ -1,18 +1,17 @@
+use crate::process_manager_status::ProcessManagerStatus;
 use crate::unit::Definition;
-use crate::unit::ServiceKind;
+use crate::unit_status::DisplayedOption;
+use crate::unit_status::UnitState;
+use crate::unit_status::UnitStatus;
 use chrono::DateTime;
 use chrono::Local;
 use chrono::Utc;
 use parking_lot::Mutex;
 use shared_child::SharedChild;
 use std::collections::HashMap;
-use std::fmt::Display;
-use std::fmt::Formatter;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
-use tabled::Table;
-use tabled::Tabled;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -37,9 +36,14 @@ pub enum ProcessManagerError {
     NoHandle(String),
 }
 
+pub struct ProcessState {
+    pub child: Arc<SharedChild>,
+    pub timestamp: DateTime<Utc>,
+}
+
 pub struct ProcessManager {
     definitions: HashMap<String, Definition>,
-    running: Arc<Mutex<HashMap<String, Arc<SharedChild>>>>,
+    running: Arc<Mutex<HashMap<String, ProcessState>>>,
     completed: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
     failed: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
 }
@@ -182,11 +186,11 @@ impl ProcessManager {
 
         let mut running = self.running.lock();
 
-        let child = running
+        let proc_state = running
             .get(name)
             .ok_or(ProcessManagerError::NotRunning(name.to_string()))?;
 
-        let id = child.id();
+        let id = proc_state.child.id();
 
         tracing::info!("{name}: stopping unit");
 
@@ -215,8 +219,8 @@ impl ProcessManager {
 
         tracing::info!("{name}: sending kill signal to {id}");
 
-        child.kill()?;
-        child.wait()?;
+        proc_state.child.kill()?;
+        proc_state.child.wait()?;
 
         tracing::info!("{name}: process {id} successfully terminated");
 
@@ -246,103 +250,70 @@ impl ProcessManager {
         Ok(())
     }
 
-    pub fn state(&self) -> State {
+    pub fn unit(&self, name: &str) -> Option<Definition> {
+        self.definitions.get(name).cloned()
+    }
+
+    pub fn state(&self) -> ProcessManagerStatus {
         let mut units = vec![];
         let running = self.running.lock();
         let completed = self.completed.lock();
         let failed = self.failed.lock();
 
         for (name, def) in &self.definitions {
-            if let Some(child) = running.get(name) {
-                units.push(UnitStatus {
-                    name: name.clone(),
-                    kind: def.service.kind,
-                    state: UnitState::Running(child.id()),
-                    pid: DisplayedOption(Some(child.id())),
-                    timestamp: DisplayedOption(None),
-                })
+            if let Some(proc_state) = running.get(name) {
+                let local: DateTime<Local> = DateTime::from(proc_state.timestamp);
+
+                units.push((
+                    def.clone(),
+                    UnitStatus {
+                        name: name.clone(),
+                        kind: def.service.kind,
+                        state: UnitState::Running,
+                        pid: DisplayedOption(Some(proc_state.child.id())),
+                        timestamp: DisplayedOption(Some(local.to_string())),
+                    },
+                ))
             } else if let Some(timestamp) = completed.get(name) {
                 let local: DateTime<Local> = DateTime::from(*timestamp);
 
-                units.push(UnitStatus {
-                    name: name.clone(),
-                    kind: def.service.kind,
-                    state: UnitState::Completed(*timestamp),
-                    pid: DisplayedOption(None),
-                    timestamp: DisplayedOption(Some(local.to_string())),
-                })
+                units.push((
+                    def.clone(),
+                    UnitStatus {
+                        name: name.clone(),
+                        kind: def.service.kind,
+                        state: UnitState::Completed,
+                        pid: DisplayedOption(None),
+                        timestamp: DisplayedOption(Some(local.to_string())),
+                    },
+                ))
             } else if let Some(timestamp) = failed.get(name) {
                 let local: DateTime<Local> = DateTime::from(*timestamp);
 
-                units.push(UnitStatus {
-                    name: name.clone(),
-                    kind: def.service.kind,
-                    state: UnitState::Failed(*timestamp),
-                    pid: DisplayedOption(None),
-                    timestamp: DisplayedOption(Some(local.to_string())),
-                })
+                units.push((
+                    def.clone(),
+                    UnitStatus {
+                        name: name.clone(),
+                        kind: def.service.kind,
+                        state: UnitState::Failed,
+                        pid: DisplayedOption(None),
+                        timestamp: DisplayedOption(Some(local.to_string())),
+                    },
+                ))
             } else {
-                units.push(UnitStatus {
-                    name: name.clone(),
-                    kind: def.service.kind,
-                    state: UnitState::Stopped,
-                    pid: DisplayedOption(None),
-                    timestamp: DisplayedOption(None),
-                })
+                units.push((
+                    def.clone(),
+                    UnitStatus {
+                        name: name.clone(),
+                        kind: def.service.kind,
+                        state: UnitState::Stopped,
+                        pid: DisplayedOption(None),
+                        timestamp: DisplayedOption(None),
+                    },
+                ))
             }
         }
 
-        State(units)
-    }
-}
-
-pub struct State(Vec<UnitStatus>);
-
-impl State {
-    pub fn as_table(&self) -> String {
-        Table::new(&self.0).to_string()
-    }
-
-    pub fn unit(&self, unit_name: &str) -> Option<&UnitStatus> {
-        self.0.iter().find(|unit| unit.name == unit_name)
-    }
-}
-
-#[derive(Tabled)]
-pub enum UnitState {
-    Running(u32),
-    Stopped,
-    Completed(DateTime<Utc>),
-    Failed(DateTime<Utc>),
-}
-
-impl Display for UnitState {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UnitState::Running(_) => write!(f, "Running"),
-            UnitState::Stopped => write!(f, "Stopped"),
-            UnitState::Completed(_) => write!(f, "Completed"),
-            UnitState::Failed(_) => write!(f, "Failed"),
-        }
-    }
-}
-
-#[derive(Tabled)]
-pub struct UnitStatus {
-    pub name: String,
-    pub kind: ServiceKind,
-    pub state: UnitState,
-    pub pid: DisplayedOption<u32>,
-    pub timestamp: DisplayedOption<String>,
-}
-
-pub struct DisplayedOption<T>(Option<T>);
-
-impl<T: Display> Display for DisplayedOption<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.0 {
-            None => write!(f, ""),
-            Some(inner) => write!(f, "{inner}"),
-        }
+        ProcessManagerStatus(units)
     }
 }
