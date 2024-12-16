@@ -9,8 +9,8 @@ pub mod unit;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum SocketMessage {
-    Start(String),
-    Stop(String),
+    Start(Vec<String>),
+    Stop(Vec<String>),
     Status(String),
     State,
     Reload,

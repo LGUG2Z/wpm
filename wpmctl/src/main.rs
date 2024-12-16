@@ -28,8 +28,8 @@ macro_rules! gen_unit_subcommands {
         $(
             #[derive(clap::Parser)]
             pub struct $name {
-                /// Target unit
-                unit: String,
+                /// Target units
+                units: Vec<String>,
             }
         )+
     };
@@ -38,7 +38,12 @@ macro_rules! gen_unit_subcommands {
 gen_unit_subcommands! {
     Start,
     Stop,
-    Status,
+}
+
+#[derive(Parser)]
+struct Status {
+    /// Target unit
+    unit: String,
 }
 
 #[derive(Parser)]
@@ -56,12 +61,15 @@ enum SubCommand {
     #[clap(hide = true)]
     Examplegen,
     /// Start a unit
+    #[clap(arg_required_else_help = true)]
     Start(Start),
     /// Stop a unit
+    #[clap(arg_required_else_help = true)]
     Stop(Stop),
     /// Show the state of the process manager
     State,
     /// Show status of a unit
+    #[clap(arg_required_else_help = true)]
     Status(Status),
     /// Reload all unit definitions
     Reload,
@@ -107,10 +115,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Definition::examplegen();
         }
         SubCommand::Start(args) => {
-            send_message("wpmd.sock", SocketMessage::Start(args.unit))?;
+            send_message("wpmd.sock", SocketMessage::Start(args.units))?;
         }
         SubCommand::Stop(args) => {
-            send_message("wpmd.sock", SocketMessage::Stop(args.unit))?;
+            send_message("wpmd.sock", SocketMessage::Stop(args.units))?;
         }
         SubCommand::Status(args) => {
             send_message("wpmd.sock", SocketMessage::Status(args.unit.clone()))?;

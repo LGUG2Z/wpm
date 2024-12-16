@@ -127,10 +127,14 @@ fn handle_connection(pm: Arc<Mutex<ProcessManager>>, conn: Stream) -> Result<(),
 
             match socket_message {
                 SocketMessage::Start(arg) => {
-                    pm.start(&arg)?;
+                    for name in arg {
+                        pm.start(&name)?;
+                    }
                 }
                 SocketMessage::Stop(arg) => {
-                    pm.stop(&arg)?;
+                    for name in arg {
+                        pm.stop(&name)?;
+                    }
                 }
                 SocketMessage::Status(arg) => {
                     if let Some(status) = pm.state().unit(&arg) {
