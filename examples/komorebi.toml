@@ -25,10 +25,10 @@ Environment = [[
 Executable = "komorebic.exe"
 Arguments = ["state"]
 
-[[Service.Shutdown]]
+[[Service.ExecStop]]
 Executable = "komorebic.exe"
 Arguments = ["stop"]
 
-[[Service.Shutdown]]
+[[Service.ExecStopPost]]
 Executable = "komorebic.exe"
 Arguments = ["restore-windows"]

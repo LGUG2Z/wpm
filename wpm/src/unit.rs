@@ -84,8 +84,10 @@ pub struct Service {
     /// Time to sleep in seconds before attempting to restart service (default: 1s)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub restart_sec: Option<u64>,
-    /// Shutdown commands for this definition
-    pub shutdown: Option<Vec<ServiceCommand>>,
+    /// Shutdown commands for this service definition
+    pub exec_stop: Option<Vec<ServiceCommand>>,
+    /// Post-shutdown cleanup commands for this service definition
+    pub exec_stop_post: Option<Vec<ServiceCommand>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, JsonSchema)]

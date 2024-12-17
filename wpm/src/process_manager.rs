@@ -165,7 +165,7 @@ impl ProcessManager {
                 }
             }
 
-            for command in definition.service.shutdown.iter_mut().flatten() {
+            for command in definition.service.exec_stop.iter_mut().flatten() {
                 if command.executable.canonicalize().is_err() {
                     match Self::find_exe(&command.executable) {
                         Some(path) => command.executable = path,
@@ -301,20 +301,20 @@ impl ProcessManager {
 
         tracing::info!("{name}: stopping unit");
 
-        if let Some(shutdown_commands) = unit.service.shutdown {
-            for shutdown in shutdown_commands {
-                let stringified = if let Some(args) = &shutdown.arguments {
+        if let Some(shutdown_commands) = unit.service.exec_stop {
+            for command in shutdown_commands {
+                let stringified = if let Some(args) = &command.arguments {
                     format!(
                         "{} {}",
-                        shutdown.executable.to_string_lossy(),
+                        command.executable.to_string_lossy(),
                         args.join(" ")
                     )
                 } else {
-                    shutdown.executable.to_string_lossy().to_string()
+                    command.executable.to_string_lossy().to_string()
                 };
 
                 tracing::info!("{name}: running shutdown command - {stringified}");
-                let mut command = shutdown.to_silent_command(unit.service.environment.clone());
+                let mut command = command.to_silent_command(unit.service.environment.clone());
                 command.output()?;
             }
         }
@@ -338,6 +338,24 @@ impl ProcessManager {
         }
 
         tracing::info!("{name}: process {id} successfully terminated");
+
+        if let Some(cleanup_commands) = unit.service.exec_stop_post {
+            for command in cleanup_commands {
+                let stringified = if let Some(args) = &command.arguments {
+                    format!(
+                        "{} {}",
+                        command.executable.to_string_lossy(),
+                        args.join(" ")
+                    )
+                } else {
+                    command.executable.to_string_lossy().to_string()
+                };
+
+                tracing::info!("{name}: running cleanup command - {stringified}");
+                let mut command = command.to_silent_command(unit.service.environment.clone());
+                command.output()?;
+            }
+        }
 
         let thread_name = name.to_string();
         if matches!(unit.service.restart, RestartStrategy::Always) {

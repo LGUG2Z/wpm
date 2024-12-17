@@ -26,7 +26,7 @@ impl ProcessManagerStatus {
                             format!("  Kind: {}", definition.service.kind),
                             format!("  State: Running since {}", status.timestamp.to_string()),
                             format!("  PID: {}", status.pid),
-                            format!("  Log file: {}", log_path.to_string_lossy()),
+                            format!("  Log: {}", log_path.to_string_lossy()),
                         ]);
                     }
                     UnitState::Stopped => {
@@ -67,12 +67,12 @@ impl ProcessManagerStatus {
                     let arguments = args.join(" ");
                     let arguments = arguments.replace("/", "\\");
                     output.push(format!(
-                        "  Command: {} {arguments}",
+                        "  ExecStart: {} {arguments}",
                         definition.service.exec_start.executable.to_string_lossy()
                     ));
                 } else {
                     output.push(format!(
-                        "  Command: {}",
+                        "  ExecStart: {}",
                         definition.service.exec_start.executable.to_string_lossy()
                     ));
                 }
@@ -99,8 +99,24 @@ impl ProcessManagerStatus {
                     None => {}
                 }
 
-                if let Some(shutdowns) = &definition.service.shutdown {
-                    output.push("  Shutdown commands:".to_string());
+                if let Some(shutdowns) = &definition.service.exec_stop {
+                    output.push("  ExecStop:".to_string());
+                    for command in shutdowns {
+                        if let Some(args) = &command.arguments {
+                            let arguments = args.join(" ");
+                            let arguments = arguments.replace("/", "\\");
+                            output.push(format!(
+                                "    {} {arguments}",
+                                command.executable.to_string_lossy()
+                            ));
+                        } else {
+                            output.push(format!("    {}", command.executable.to_string_lossy()));
+                        }
+                    }
+                }
+
+                if let Some(shutdowns) = &definition.service.exec_stop_post {
+                    output.push("  ExecStopPost:".to_string());
                     for command in shutdowns {
                         if let Some(args) = &command.arguments {
                             let arguments = args.join(" ");

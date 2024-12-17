@@ -104,6 +104,26 @@
             }
           ]
         },
+        "ExecStop": {
+          "description": "Shutdown commands for this service definition",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/ServiceCommand"
+          }
+        },
+        "ExecStopPost": {
+          "description": "Post-shutdown cleanup commands for this service definition",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/ServiceCommand"
+          }
+        },
         "Healthcheck": {
           "description": "Healthcheck for this service definition",
           "default": null,
@@ -142,16 +162,6 @@
           ],
           "format": "uint64",
           "minimum": 0.0
-        },
-        "Shutdown": {
-          "description": "Shutdown commands for this definition",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/definitions/ServiceCommand"
-          }
         },
         "WorkingDirectory": {
           "description": "Working directory for this service definition",
