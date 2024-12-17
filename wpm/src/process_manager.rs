@@ -1,9 +1,13 @@
+use crate::communication::send_message;
 use crate::process_manager_status::ProcessManagerStatus;
 use crate::unit::Definition;
 use crate::unit::Healthcheck;
+use crate::unit::RestartStrategy;
+use crate::unit::ServiceKind;
 use crate::unit_status::DisplayedOption;
 use crate::unit_status::UnitState;
 use crate::unit_status::UnitStatus;
+use crate::SocketMessage;
 use chrono::DateTime;
 use chrono::Local;
 use chrono::Utc;
@@ -13,6 +17,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -186,7 +191,19 @@ impl ProcessManager {
                 }
             }
 
-            if let Healthcheck::Command(c) = &mut definition.service.healthcheck {
+            if matches!(definition.service.kind, ServiceKind::Simple)
+                && definition.service.healthcheck.is_none()
+            {
+                definition.service.healthcheck = Some(Healthcheck::default());
+            }
+
+            if matches!(definition.service.kind, ServiceKind::Oneshot)
+                && definition.service.healthcheck.is_some()
+            {
+                definition.service.healthcheck = None;
+            }
+
+            if let Some(Healthcheck::Command(c)) = &mut definition.service.healthcheck {
                 let mut components = c.split_whitespace().collect::<Vec<_>>();
                 let mut executable = String::new();
                 if let Some(exe) = components.first() {
@@ -334,6 +351,21 @@ impl ProcessManager {
         }
 
         tracing::info!("{name}: process {id} successfully terminated");
+
+        let thread_name = name.to_string();
+        if matches!(unit.service.restart, RestartStrategy::Always) {
+            std::thread::spawn(move || {
+                let restart_sec = unit.service.restart_sec.unwrap_or(1);
+                tracing::info!("{thread_name}: restarting terminated process in {restart_sec}s");
+                std::thread::sleep(Duration::from_secs(restart_sec));
+
+                if let Err(error) =
+                    send_message("wpmd.sock", SocketMessage::Start(vec![thread_name.clone()]))
+                {
+                    tracing::error!("{thread_name}: {error}");
+                }
+            });
+        }
 
         Ok(())
     }

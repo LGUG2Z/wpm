@@ -78,12 +78,13 @@ impl ProcessManagerStatus {
                 }
 
                 match &definition.service.healthcheck {
-                    Healthcheck::Command(command) => {
+                    Some(Healthcheck::Command(command)) => {
                         output.push(format!("  Healthcheck: {command}",));
                     }
-                    Healthcheck::LivenessSeconds(seconds) => {
+                    Some(Healthcheck::LivenessSec(seconds)) => {
                         output.push(format!("  Healthcheck: Liveness check after {seconds}s",));
                     }
+                    None => {}
                 }
 
                 if let Some(shutdowns) = &definition.service.shutdown {

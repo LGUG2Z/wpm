@@ -1,13 +1,14 @@
-[unit]
-name = "desktop"
-description = "everything I need to work on Windows"
-requires = ["komorebi"]
+[Unit]
+Name = "desktop"
+Description = "everything I need to work on Windows"
+Requires = ["komorebi"]
 
-[service]
-kind = "Oneshot"
-autostart = true
-executable = "msg.exe"
-arguments = [
+[Service]
+Kind = "Oneshot"
+Autostart = true
+Executable = "msg.exe"
+Arguments = [
     "*",
     "Desktop recipe completed!",
 ]
+Restart = "Never"

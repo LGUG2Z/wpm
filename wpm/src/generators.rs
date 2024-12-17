@@ -1,5 +1,6 @@
 use crate::unit::Definition;
 use crate::unit::Healthcheck;
+use crate::unit::RestartStrategy;
 use crate::unit::Service;
 use crate::unit::ServiceKind;
 use crate::unit::Unit;
@@ -32,7 +33,9 @@ impl Definition {
                     ]),
                     environment: None,
                     working_directory: None,
-                    healthcheck: Healthcheck::default(),
+                    healthcheck: Some(Healthcheck::default()),
+                    restart: Default::default(),
+                    restart_sec: None,
                     shutdown: None,
                     autostart: false,
                 },
@@ -49,7 +52,9 @@ impl Definition {
                     arguments: None,
                     environment: None,
                     working_directory: None,
-                    healthcheck: Healthcheck::default(),
+                    healthcheck: Some(Healthcheck::default()),
+                    restart: Default::default(),
+                    restart_sec: None,
                     shutdown: None,
                     autostart: false,
                 },
@@ -72,7 +77,9 @@ impl Definition {
                         "$USERPROFILE/.config/komorebi".to_string(),
                     )]),
                     working_directory: None,
-                    healthcheck: Healthcheck::Command("komorebic.exe state".to_string()),
+                    healthcheck: Some(Healthcheck::Command("komorebic.exe state".to_string())),
+                    restart: Default::default(),
+                    restart_sec: None,
                     shutdown: Some(vec![
                         "komorebic.exe stop".to_string(),
                         "komorebic.exe restore-windows".to_string(),
@@ -92,7 +99,9 @@ impl Definition {
                     arguments: None,
                     environment: None,
                     working_directory: None,
-                    healthcheck: Healthcheck::default(),
+                    healthcheck: Some(Healthcheck::default()),
+                    restart: RestartStrategy::OnFailure,
+                    restart_sec: Some(2),
                     shutdown: None,
                     autostart: false,
                 },
@@ -112,7 +121,9 @@ impl Definition {
                     ]),
                     environment: None,
                     working_directory: None,
-                    healthcheck: Healthcheck::default(),
+                    healthcheck: None,
+                    restart: Default::default(),
+                    restart_sec: None,
                     shutdown: None,
                     autostart: true,
                 },

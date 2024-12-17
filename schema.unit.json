@@ -4,11 +4,11 @@
   "description": "A wpm definition",
   "type": "object",
   "required": [
-    "service",
-    "unit"
+    "Service",
+    "Unit"
   ],
   "properties": {
-    "service": {
+    "Service": {
       "description": "Information about what this definition executes",
       "allOf": [
         {
@@ -16,7 +16,7 @@
         }
       ]
     },
-    "unit": {
+    "Unit": {
       "description": "Information about this definition and its dependencies",
       "allOf": [
         {
@@ -43,10 +43,10 @@
         {
           "type": "object",
           "required": [
-            "LivenessSeconds"
+            "LivenessSec"
           ],
           "properties": {
-            "LivenessSeconds": {
+            "LivenessSec": {
               "type": "integer",
               "format": "uint64",
               "minimum": 0.0
@@ -56,14 +56,23 @@
         }
       ]
     },
+    "RestartStrategy": {
+      "description": "Information about a wpm definition's restart strategy",
+      "type": "string",
+      "enum": [
+        "Never",
+        "Always",
+        "OnFailure"
+      ]
+    },
     "Service": {
       "description": "Information about what a wpm definition executes",
       "type": "object",
       "required": [
-        "executable"
+        "Executable"
       ],
       "properties": {
-        "arguments": {
+        "Arguments": {
           "description": "Arguments passed to the executable",
           "type": [
             "array",
@@ -73,12 +82,11 @@
             "type": "string"
           }
         },
-        "autostart": {
+        "Autostart": {
           "description": "Autostart this definition with wpmd",
-          "default": false,
           "type": "boolean"
         },
-        "environment": {
+        "Environment": {
           "description": "Environment variables for this service definition",
           "type": [
             "array",
@@ -98,31 +106,50 @@
             "minItems": 2
           }
         },
-        "executable": {
+        "Executable": {
           "description": "Executable name or absolute path to an executable",
           "type": "string"
         },
-        "healthcheck": {
+        "Healthcheck": {
           "description": "Healthcheck for this service definition",
-          "default": {
-            "LivenessSeconds": 1
-          },
-          "allOf": [
+          "default": null,
+          "anyOf": [
             {
               "$ref": "#/definitions/Healthcheck"
+            },
+            {
+              "type": "null"
             }
           ]
         },
-        "kind": {
+        "Kind": {
           "description": "Type of service definition",
           "default": "Simple",
           "allOf": [
             {
-              "$ref": "#/definitions/ServiceType"
+              "$ref": "#/definitions/ServiceKind"
             }
           ]
         },
-        "shutdown": {
+        "Restart": {
+          "description": "Restart strategy for this service definition",
+          "default": "Never",
+          "allOf": [
+            {
+              "$ref": "#/definitions/RestartStrategy"
+            }
+          ]
+        },
+        "RestartSec": {
+          "description": "Time to sleep in seconds before attempting to restart service (default: 1s)",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "Shutdown": {
           "description": "Shutdown commands for this definition",
           "type": [
             "array",
@@ -131,10 +158,17 @@
           "items": {
             "type": "string"
           }
+        },
+        "WorkingDirectory": {
+          "description": "Working directory for this service definition",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
-    "ServiceType": {
+    "ServiceKind": {
       "type": "string",
       "enum": [
         "Simple",
@@ -145,21 +179,21 @@
       "description": "Information about a wpm definition and its dependencies",
       "type": "object",
       "required": [
-        "name"
+        "Name"
       ],
       "properties": {
-        "description": {
+        "Description": {
           "description": "Description of this definition",
           "type": [
             "string",
             "null"
           ]
         },
-        "name": {
+        "Name": {
           "description": "Name of this definition, must be unique",
           "type": "string"
         },
-        "requires": {
+        "Requires": {
           "description": "Dependencies of this definition, validated at runtime",
           "type": [
             "array",

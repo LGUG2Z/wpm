@@ -1,27 +1,27 @@
-[unit]
-name = "komorebi"
-description = "tiling window management for Windows"
-requires = [
+[Unit]
+Name = "komorebi"
+Description = "tiling window management for Windows"
+Requires = [
     "whkd",
     "kanata",
 ]
 
-[service]
-kind = "Simple"
-autostart = false
-executable = "komorebi.exe"
-arguments = [
+[Service]
+Kind = "Simple"
+Executable = "komorebi.exe"
+Arguments = [
     "--config",
     "$USERPROFILE/.config/komorebi/komorebi.json",
 ]
-environment = [[
+Environment = [[
     "KOMOREBI_CONFIG_HOME",
     "$USERPROFILE/.config/komorebi",
 ]]
-shutdown = [
-    "komorebic stop",
-    "komorebic restore-windows"
+Restart = "Never"
+Shutdown = [
+    "komorebic.exe stop",
+    "komorebic.exe restore-windows",
 ]
 
-[service.healthcheck]
-Command = "komorebic state"
+[Service.Healthcheck]
+Command = "komorebic.exe state"

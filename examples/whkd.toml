@@ -1,11 +1,12 @@
-[unit]
-name = "whkd"
-description = "simple hotkey daemon for Windows"
+[Unit]
+Name = "whkd"
+Description = "simple hotkey daemon for Windows"
 
-[service]
-kind = "Simple"
-autostart = false
-executable = "whkd.exe"
+[Service]
+Kind = "Simple"
+Executable = "whkd.exe"
+Restart = "OnFailure"
+RestartSec = 2
 
-[service.healthcheck]
-LivenessSeconds = 1
+[Service.Healthcheck]
+LivenessSec = 1

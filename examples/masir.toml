@@ -1,12 +1,12 @@
-[unit]
-name = "masir"
-description = "focus follows mouse for Windows"
-requires = ["komorebi"]
+[Unit]
+Name = "masir"
+Description = "focus follows mouse for Windows"
+Requires = ["komorebi"]
 
-[service]
-kind = "Simple"
-autostart = false
-executable = "masir.exe"
+[Service]
+Kind = "Simple"
+Executable = "masir.exe"
+Restart = "Never"
 
-[service.healthcheck]
-LivenessSeconds = 1
+[Service.Healthcheck]
+LivenessSec = 1

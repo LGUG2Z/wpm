@@ -1,17 +1,17 @@
-[unit]
-name = "kanata"
-description = "software keyboard remapper"
+[Unit]
+Name = "kanata"
+Description = "software keyboard remapper"
 
-[service]
-kind = "Simple"
-autostart = false
-executable = "kanata.exe"
-arguments = [
+[Service]
+Kind = "Simple"
+Executable = "kanata.exe"
+Arguments = [
     "-c",
     "$USERPROFILE/minimal.kbd",
     "--port",
     "9999",
 ]
+Restart = "Never"
 
-[service.healthcheck]
-LivenessSeconds = 1
+[Service.Healthcheck]
+LivenessSec = 1

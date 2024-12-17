@@ -1,5 +1,7 @@
+use crate::communication::send_message;
 use crate::process_manager::ProcessManagerError;
 use crate::process_manager::ProcessState;
+use crate::SocketMessage;
 use chrono::DateTime;
 use chrono::Utc;
 use parking_lot::Mutex;
@@ -11,6 +13,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fs::File;
+use std::ops::Not;
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
@@ -23,6 +26,7 @@ use sysinfo::System;
 
 #[derive(Serialize, Deserialize, Clone, JsonSchema)]
 /// A wpm definition
+#[serde(rename_all = "PascalCase")]
 pub struct Definition {
     /// Information about this definition and its dependencies
     pub unit: Unit,
@@ -32,24 +36,38 @@ pub struct Definition {
 
 #[derive(Serialize, Deserialize, Clone, JsonSchema)]
 /// Information about a wpm definition and its dependencies
+#[serde(rename_all = "PascalCase")]
 pub struct Unit {
     /// Name of this definition, must be unique
     pub name: String,
     /// Description of this definition
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Dependencies of this definition, validated at runtime
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub requires: Option<Vec<String>>,
+}
+
+#[derive(Default, Serialize, Deserialize, Copy, Clone, JsonSchema)]
+/// Information about a wpm definition's restart strategy
+pub enum RestartStrategy {
+    #[default]
+    Never,
+    Always,
+    OnFailure,
 }
 
 #[derive(Serialize, Deserialize, Clone, JsonSchema)]
 /// Information about what a wpm definition executes
+#[serde(rename_all = "PascalCase")]
 pub struct Service {
-    #[serde(alias = "type")]
+    #[serde(alias = "Type")]
     #[serde(default)]
     /// Type of service definition
     pub kind: ServiceKind,
     /// Autostart this definition with wpmd
     #[serde(default)]
+    #[serde(skip_serializing_if = "<&bool>::not")]
     pub autostart: bool,
     /// Executable name or absolute path to an executable
     pub executable: PathBuf,
@@ -61,7 +79,13 @@ pub struct Service {
     pub working_directory: Option<PathBuf>,
     #[serde(default)]
     /// Healthcheck for this service definition
-    pub healthcheck: Healthcheck,
+    pub healthcheck: Option<Healthcheck>,
+    #[serde(default)]
+    /// Restart strategy for this service definition
+    pub restart: RestartStrategy,
+    /// Time to sleep in seconds before attempting to restart service (default: 1s)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restart_sec: Option<u64>,
     /// Shutdown commands for this definition
     pub shutdown: Option<Vec<String>>,
 }
@@ -85,11 +109,15 @@ impl Definition {
         let running_thread = running.clone();
         let terminated_thread = terminated.clone();
 
+        let restart_strategy = self.service.restart;
+        let restart_sec = self.service.restart_sec.unwrap_or(1);
+
         match self.service.kind {
             ServiceKind::Simple => {
                 std::thread::spawn(move || {
                     match thread_child.wait() {
                         Ok(exit_status) => {
+                            let mut should_restart = false;
                             // only want to mark units not terminated via the wpmctl stop command
                             if running_thread.lock().contains_key(&name) {
                                 if exit_status.success() {
@@ -99,6 +127,10 @@ impl Definition {
                                         // this is safe on Windows apparently
                                         exit_status.code().unwrap()
                                     );
+
+                                    if matches!(restart_strategy, RestartStrategy::Always) {
+                                        should_restart = true;
+                                    }
                                 } else {
                                     tracing::warn!(
                                         "{name}: process {} terminated with failure exit code {}",
@@ -106,10 +138,40 @@ impl Definition {
                                         // this is safe on Windows apparently
                                         exit_status.code().unwrap()
                                     );
+
+                                    if matches!(
+                                        restart_strategy,
+                                        RestartStrategy::Always | RestartStrategy::OnFailure
+                                    ) {
+                                        should_restart = true;
+                                    }
                                 }
 
-                                terminated_thread.lock().insert(name.clone(), Utc::now());
-                                // TODO: act on some kind of restart hooks passed via unit definition here
+                                if should_restart {
+                                    running_thread.lock().remove(&name);
+                                    tracing::info!(
+                                        "{name}: restarting terminated process in {restart_sec}s"
+                                    );
+
+                                    std::thread::sleep(Duration::from_secs(restart_sec));
+                                    if let Err(error) = send_message(
+                                        "wpmd.sock",
+                                        SocketMessage::Reset(vec![name.to_string()]),
+                                    ) {
+                                        tracing::error!("{name}: {error}");
+                                    }
+
+                                    if let Err(error) = send_message(
+                                        "wpmd.sock",
+                                        SocketMessage::Start(vec![name.to_string()]),
+                                    ) {
+                                        tracing::error!("{name}: {error}");
+                                    }
+
+                                    return;
+                                } else {
+                                    terminated_thread.lock().insert(name.clone(), Utc::now());
+                                }
                             }
                         }
                         Err(error) => {
@@ -171,7 +233,7 @@ impl Definition {
         }
 
         match &self.service.healthcheck {
-            Healthcheck::Command(healthcheck) => {
+            Some(Healthcheck::Command(healthcheck)) => {
                 tracing::info!("{name}: running command healthcheck - {healthcheck}");
                 let healthcheck_components = healthcheck.split_whitespace().collect::<Vec<_>>();
                 let mut healthcheck_command = Command::new(healthcheck_components[0]);
@@ -203,7 +265,7 @@ impl Definition {
                     passed = true;
                 }
             }
-            Healthcheck::LivenessSeconds(seconds) => {
+            Some(Healthcheck::LivenessSec(seconds)) => {
                 tracing::info!("{name}: running liveness healthcheck ({seconds}s)");
                 std::thread::sleep(Duration::from_secs(*seconds));
                 let mut system = System::new_all();
@@ -219,6 +281,7 @@ impl Definition {
                     passed = true;
                 }
             }
+            None => {}
         }
 
         if passed {
@@ -254,12 +317,12 @@ impl Definition {
 #[derive(Serialize, Deserialize, Clone, JsonSchema)]
 pub enum Healthcheck {
     Command(String),
-    LivenessSeconds(u64),
+    LivenessSec(u64),
 }
 
 impl Default for Healthcheck {
     fn default() -> Self {
-        Self::LivenessSeconds(1)
+        Self::LivenessSec(1)
     }
 }
 
