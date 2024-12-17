@@ -4,6 +4,9 @@ Description = "software keyboard remapper"
 
 [Service]
 Kind = "Simple"
+Restart = "Never"
+
+[Service.ExecStart]
 Executable = "kanata.exe"
 Arguments = [
     "-c",
@@ -11,7 +14,6 @@ Arguments = [
     "--port",
     "9999",
 ]
-Restart = "Never"
 
 [Service.Healthcheck]
 LivenessSec = 1

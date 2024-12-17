@@ -35,7 +35,7 @@
           ],
           "properties": {
             "Command": {
-              "type": "string"
+              "$ref": "#/definitions/ServiceCommand"
             }
           },
           "additionalProperties": false
@@ -69,25 +69,15 @@
       "description": "Information about what a wpm definition executes",
       "type": "object",
       "required": [
-        "Executable"
+        "ExecStart"
       ],
       "properties": {
-        "Arguments": {
-          "description": "Arguments passed to the executable",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
         "Autostart": {
           "description": "Autostart this definition with wpmd",
           "type": "boolean"
         },
         "Environment": {
-          "description": "Environment variables for this service definition",
+          "description": "Environment variables inherited by all commands in this service definition",
           "type": [
             "array",
             "null"
@@ -106,9 +96,13 @@
             "minItems": 2
           }
         },
-        "Executable": {
+        "ExecStart": {
           "description": "Executable name or absolute path to an executable",
-          "type": "string"
+          "allOf": [
+            {
+              "$ref": "#/definitions/ServiceCommand"
+            }
+          ]
         },
         "Healthcheck": {
           "description": "Healthcheck for this service definition",
@@ -156,7 +150,7 @@
             "null"
           ],
           "items": {
-            "type": "string"
+            "$ref": "#/definitions/ServiceCommand"
           }
         },
         "WorkingDirectory": {
@@ -165,6 +159,49 @@
             "string",
             "null"
           ]
+        }
+      }
+    },
+    "ServiceCommand": {
+      "description": "A wpm definition command",
+      "type": "object",
+      "required": [
+        "Executable"
+      ],
+      "properties": {
+        "Arguments": {
+          "description": "Arguments passed to the executable",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "Environment": {
+          "description": "Environment variables for this command",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "Executable": {
+          "description": "Executable name or absolute path to an executable",
+          "type": "string"
         }
       }
     },

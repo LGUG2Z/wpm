@@ -1,14 +1,19 @@
 [Unit]
 Name = "desktop"
 Description = "everything I need to work on Windows"
-Requires = ["komorebi"]
+Requires = [
+    "komorebi",
+    "komorebi-bar",
+]
 
 [Service]
 Kind = "Oneshot"
 Autostart = true
+Restart = "Never"
+
+[Service.ExecStart]
 Executable = "msg.exe"
 Arguments = [
     "*",
     "Desktop recipe completed!",
 ]
-Restart = "Never"

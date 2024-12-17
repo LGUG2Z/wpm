@@ -4,9 +4,11 @@ Description = "simple hotkey daemon for Windows"
 
 [Service]
 Kind = "Simple"
-Executable = "whkd.exe"
 Restart = "OnFailure"
 RestartSec = 2
+
+[Service.ExecStart]
+Executable = "whkd.exe"
 
 [Service.Healthcheck]
 LivenessSec = 1

@@ -70,10 +70,8 @@ pub struct Service {
     #[serde(skip_serializing_if = "<&bool>::not")]
     pub autostart: bool,
     /// Executable name or absolute path to an executable
-    pub executable: PathBuf,
-    /// Arguments passed to the executable
-    pub arguments: Option<Vec<String>>,
-    /// Environment variables for this service definition
+    pub exec_start: ServiceCommand,
+    /// Environment variables inherited by all commands in this service definition
     pub environment: Option<Vec<(String, String)>>,
     /// Working directory for this service definition
     pub working_directory: Option<PathBuf>,
@@ -87,7 +85,41 @@ pub struct Service {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub restart_sec: Option<u64>,
     /// Shutdown commands for this definition
-    pub shutdown: Option<Vec<String>>,
+    pub shutdown: Option<Vec<ServiceCommand>>,
+}
+
+#[derive(Serialize, Deserialize, Clone, JsonSchema)]
+/// A wpm definition command
+#[serde(rename_all = "PascalCase")]
+pub struct ServiceCommand {
+    /// Executable name or absolute path to an executable
+    pub executable: PathBuf,
+    /// Arguments passed to the executable
+    pub arguments: Option<Vec<String>>,
+    /// Environment variables for this command
+    pub environment: Option<Vec<(String, String)>>,
+}
+
+impl ServiceCommand {
+    pub fn to_silent_command(&self, global_environment: Option<Vec<(String, String)>>) -> Command {
+        let mut command = Command::new(&self.executable);
+        if let Some(arguments) = &self.arguments {
+            command.args(arguments);
+        }
+
+        if let Some(environment) = global_environment {
+            command.envs(environment);
+        }
+
+        if let Some(environment) = &self.environment {
+            command.envs(environment.clone());
+        }
+
+        command.stdout(std::process::Stdio::null());
+        command.stderr(std::process::Stdio::null());
+
+        command
+    }
 }
 
 impl Definition {
@@ -234,30 +266,26 @@ impl Definition {
 
         match &self.service.healthcheck {
             Some(Healthcheck::Command(healthcheck)) => {
-                tracing::info!("{name}: running command healthcheck - {healthcheck}");
-                let healthcheck_components = healthcheck.split_whitespace().collect::<Vec<_>>();
-                let mut healthcheck_command = Command::new(healthcheck_components[0]);
-                for component in healthcheck_components[1..].iter() {
-                    let component = component.replace(
-                        "$USERPROFILE",
-                        dirs::home_dir()
-                            .expect("could not find home dir")
-                            .to_str()
-                            .unwrap(),
-                    );
-                    healthcheck_command.arg(component);
-                }
+                let stringified = if let Some(args) = &healthcheck.arguments {
+                    format!(
+                        "{} {}",
+                        healthcheck.executable.to_string_lossy(),
+                        args.join(" ")
+                    )
+                } else {
+                    healthcheck.executable.to_string_lossy().to_string()
+                };
 
-                healthcheck_command.stdout(std::process::Stdio::null());
-                healthcheck_command.stderr(std::process::Stdio::null());
+                tracing::info!("{name}: running command healthcheck - {stringified}");
+                let mut command = healthcheck.to_silent_command(self.service.environment.clone());
 
-                let mut status = healthcheck_command.spawn()?.wait()?;
+                let mut status = command.spawn()?.wait()?;
                 let mut max_attempts = 5;
 
                 while !status.success() && max_attempts > 0 {
                     tracing::warn!("{name}: failed healthcheck command, retrying in 2s");
                     std::thread::sleep(Duration::from_secs(2));
-                    status = healthcheck_command.spawn()?.wait()?;
+                    status = command.spawn()?.wait()?;
                     max_attempts -= 1;
                 }
 
@@ -316,7 +344,7 @@ impl Definition {
 
 #[derive(Serialize, Deserialize, Clone, JsonSchema)]
 pub enum Healthcheck {
-    Command(String),
+    Command(ServiceCommand),
     LivenessSec(u64),
 }
 
@@ -351,13 +379,13 @@ impl From<&Definition> for Command {
         let stdout = file.try_clone().unwrap();
         let stderr = stdout.try_clone().unwrap();
 
-        let mut command = Command::new(&value.service.executable);
+        let mut command = Command::new(&value.service.exec_start.executable);
 
         if let Some(environment) = &value.service.environment {
             command.envs(environment.clone());
         }
 
-        if let Some(arguments) = &value.service.arguments {
+        if let Some(arguments) = &value.service.exec_start.arguments {
             command.args(arguments);
         }
 

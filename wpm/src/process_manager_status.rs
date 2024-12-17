@@ -63,23 +63,35 @@ impl ProcessManagerStatus {
                     }
                 }
 
-                if let Some(args) = &definition.service.arguments {
+                if let Some(args) = &definition.service.exec_start.arguments {
                     let arguments = args.join(" ");
                     let arguments = arguments.replace("/", "\\");
                     output.push(format!(
                         "  Command: {} {arguments}",
-                        definition.service.executable.to_string_lossy()
+                        definition.service.exec_start.executable.to_string_lossy()
                     ));
                 } else {
                     output.push(format!(
                         "  Command: {}",
-                        definition.service.executable.to_string_lossy()
+                        definition.service.exec_start.executable.to_string_lossy()
                     ));
                 }
 
                 match &definition.service.healthcheck {
                     Some(Healthcheck::Command(command)) => {
-                        output.push(format!("  Healthcheck: {command}",));
+                        if let Some(args) = &command.arguments {
+                            let arguments = args.join(" ");
+                            let arguments = arguments.replace("/", "\\");
+                            output.push(format!(
+                                "  Healthcheck: {} {arguments}",
+                                command.executable.to_string_lossy()
+                            ));
+                        } else {
+                            output.push(format!(
+                                "  Healthcheck: {}",
+                                command.executable.to_string_lossy()
+                            ));
+                        }
                     }
                     Some(Healthcheck::LivenessSec(seconds)) => {
                         output.push(format!("  Healthcheck: Liveness check after {seconds}s",));
@@ -89,8 +101,17 @@ impl ProcessManagerStatus {
 
                 if let Some(shutdowns) = &definition.service.shutdown {
                     output.push("  Shutdown commands:".to_string());
-                    for s in shutdowns {
-                        output.push(format!("    {s}"));
+                    for command in shutdowns {
+                        if let Some(args) = &command.arguments {
+                            let arguments = args.join(" ");
+                            let arguments = arguments.replace("/", "\\");
+                            output.push(format!(
+                                "    {} {arguments}",
+                                command.executable.to_string_lossy()
+                            ));
+                        } else {
+                            output.push(format!("    {}", command.executable.to_string_lossy()));
+                        }
                     }
                 }
 

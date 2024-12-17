@@ -5,8 +5,10 @@ Requires = ["komorebi"]
 
 [Service]
 Kind = "Simple"
-Executable = "masir.exe"
 Restart = "Never"
+
+[Service.ExecStart]
+Executable = "masir.exe"
 
 [Service.Healthcheck]
 LivenessSec = 1

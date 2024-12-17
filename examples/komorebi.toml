@@ -8,6 +8,9 @@ Requires = [
 
 [Service]
 Kind = "Simple"
+Restart = "Never"
+
+[Service.ExecStart]
 Executable = "komorebi.exe"
 Arguments = [
     "--config",
@@ -17,11 +20,15 @@ Environment = [[
     "KOMOREBI_CONFIG_HOME",
     "$USERPROFILE/.config/komorebi",
 ]]
-Restart = "Never"
-Shutdown = [
-    "komorebic.exe stop",
-    "komorebic.exe restore-windows",
-]
 
-[Service.Healthcheck]
-Command = "komorebic.exe state"
+[Service.Healthcheck.Command]
+Executable = "komorebic.exe"
+Arguments = ["state"]
+
+[[Service.Shutdown]]
+Executable = "komorebic.exe"
+Arguments = ["stop"]
+
+[[Service.Shutdown]]
+Executable = "komorebic.exe"
+Arguments = ["restore-windows"]

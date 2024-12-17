@@ -14,8 +14,8 @@ use chrono::Utc;
 use parking_lot::Mutex;
 use shared_child::SharedChild;
 use std::collections::HashMap;
+use std::path::Path;
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -70,10 +70,15 @@ impl ProcessManager {
         dir
     }
 
-    fn find_exe(exe_name: &PathBuf) -> Option<PathBuf> {
+    fn find_exe(exe_name: &Path) -> Option<PathBuf> {
+        let mut name = exe_name.to_path_buf();
+        if name.extension().is_none() {
+            name = exe_name.with_extension("exe");
+        }
+
         if let Ok(paths) = std::env::var("PATH") {
             for path in std::env::split_paths(&paths) {
-                let full_path = path.join(exe_name);
+                let full_path = path.join(&name);
                 if full_path.is_file() {
                     return Some(full_path);
                 }
@@ -116,6 +121,11 @@ impl ProcessManager {
 
     pub fn load_units(&mut self) -> Result<(), ProcessManagerError> {
         let read_dir = std::fs::read_dir(Self::unit_directory())?;
+        let home_dir = dirs::home_dir()
+            .expect("could not find home dir")
+            .to_str()
+            .unwrap()
+            .to_string();
 
         let mut units = vec![];
 
@@ -128,29 +138,23 @@ impl ProcessManager {
 
         for path in units {
             let mut definition: Definition = toml::from_str(&std::fs::read_to_string(path)?)?;
-            for arg in definition.service.arguments.iter_mut().flatten() {
-                *arg = arg.replace(
-                    "$USERPROFILE",
-                    dirs::home_dir()
-                        .expect("could not find home dir")
-                        .to_str()
-                        .unwrap(),
-                );
+            for arg in definition.service.exec_start.arguments.iter_mut().flatten() {
+                *arg = arg.replace("$USERPROFILE", &home_dir);
             }
 
             for (_, value) in definition.service.environment.iter_mut().flatten() {
-                *value = value.replace(
-                    "$USERPROFILE",
-                    dirs::home_dir()
-                        .expect("could not find home dir")
-                        .to_str()
-                        .unwrap(),
-                );
+                *value = value.replace("$USERPROFILE", &home_dir);
             }
 
-            if definition.service.executable.canonicalize().is_err() {
-                match Self::find_exe(&definition.service.executable) {
-                    Some(path) => definition.service.executable = path,
+            if definition
+                .service
+                .exec_start
+                .executable
+                .canonicalize()
+                .is_err()
+            {
+                match Self::find_exe(&definition.service.exec_start.executable) {
+                    Some(path) => definition.service.exec_start.executable = path,
                     None => {
                         tracing::warn!(
                             "{}: could not find executable in $PATH, skipping unit",
@@ -161,33 +165,26 @@ impl ProcessManager {
                 }
             }
 
-            if let Some(shutdowns) = &mut definition.service.shutdown {
-                for s in shutdowns {
-                    let mut components = s.split_whitespace().collect::<Vec<_>>();
-                    let mut executable = String::new();
-                    if let Some(exe) = components.first() {
-                        let mut exe = exe.to_string();
-                        if !exe.ends_with(".exe") {
-                            exe = format!("{exe}.exe");
-                        }
-
-                        let exe = PathBuf::from(exe);
-                        if exe.canonicalize().is_err() {
-                            match Self::find_exe(&exe) {
-                                Some(path) => executable = path.to_string_lossy().to_string(),
-                                None => {
-                                    tracing::warn!("{}: could not find shutdown command executable in $PATH, skipping unit", definition.unit.name);
-                                    continue;
-                                }
-                            }
+            for command in definition.service.shutdown.iter_mut().flatten() {
+                if command.executable.canonicalize().is_err() {
+                    match Self::find_exe(&command.executable) {
+                        Some(path) => command.executable = path,
+                        None => {
+                            tracing::warn!(
+                            "{}: could not find shutdown command executable in $PATH, skipping unit",
+                            definition.unit.name
+                        );
+                            continue;
                         }
                     }
+                }
 
-                    if !executable.is_empty() {
-                        components[0] = &executable;
-                    }
+                for arg in command.arguments.iter_mut().flatten() {
+                    *arg = arg.replace("$USERPROFILE", &home_dir);
+                }
 
-                    *s = components.join(" ");
+                for (_, value) in command.environment.iter_mut().flatten() {
+                    *value = value.replace("$USERPROFILE", &home_dir);
                 }
             }
 
@@ -203,32 +200,27 @@ impl ProcessManager {
                 definition.service.healthcheck = None;
             }
 
-            if let Some(Healthcheck::Command(c)) = &mut definition.service.healthcheck {
-                let mut components = c.split_whitespace().collect::<Vec<_>>();
-                let mut executable = String::new();
-                if let Some(exe) = components.first() {
-                    let mut exe = exe.to_string();
-                    if !exe.ends_with(".exe") {
-                        exe = format!("{exe}.exe");
-                    }
-
-                    let exe = PathBuf::from(exe);
-                    if exe.canonicalize().is_err() {
-                        match Self::find_exe(&exe) {
-                            Some(path) => executable = path.to_string_lossy().to_string(),
-                            None => {
-                                tracing::warn!("{}: could not find healthcheck executable in $PATH, skipping unit", definition.unit.name);
-                                continue;
-                            }
+            if let Some(Healthcheck::Command(command)) = &mut definition.service.healthcheck {
+                if command.executable.canonicalize().is_err() {
+                    match Self::find_exe(&command.executable) {
+                        Some(path) => command.executable = path,
+                        None => {
+                            tracing::warn!(
+                            "{}: could not find healthcheck command executable in $PATH, skipping unit",
+                            definition.unit.name
+                        );
+                            continue;
                         }
                     }
                 }
 
-                if !executable.is_empty() {
-                    components[0] = &executable;
+                for arg in command.arguments.iter_mut().flatten() {
+                    *arg = arg.replace("$USERPROFILE", &home_dir);
                 }
 
-                *c = components.join(" ");
+                for (_, value) in command.environment.iter_mut().flatten() {
+                    *value = value.replace("$USERPROFILE", &home_dir);
+                }
             }
 
             self.register(definition);
@@ -311,24 +303,19 @@ impl ProcessManager {
 
         if let Some(shutdown_commands) = unit.service.shutdown {
             for shutdown in shutdown_commands {
-                tracing::info!("{name}: running shutdown command - {shutdown}");
-                let shutdown_components = shutdown.split_whitespace().collect::<Vec<_>>();
-                let mut shutdown_command = Command::new(shutdown_components[0]);
-                for component in shutdown_components[1..].iter() {
-                    let component = component.replace(
-                        "$USERPROFILE",
-                        dirs::home_dir()
-                            .expect("could not find home dir")
-                            .to_str()
-                            .unwrap(),
-                    );
-                    shutdown_command.arg(component);
-                }
+                let stringified = if let Some(args) = &shutdown.arguments {
+                    format!(
+                        "{} {}",
+                        shutdown.executable.to_string_lossy(),
+                        args.join(" ")
+                    )
+                } else {
+                    shutdown.executable.to_string_lossy().to_string()
+                };
 
-                shutdown_command.stdout(std::process::Stdio::null());
-                shutdown_command.stderr(std::process::Stdio::null());
-
-                shutdown_command.output()?;
+                tracing::info!("{name}: running shutdown command - {stringified}");
+                let mut command = shutdown.to_silent_command(unit.service.environment.clone());
+                command.output()?;
             }
         }
 
