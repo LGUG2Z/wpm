@@ -17,5 +17,5 @@ pub enum SocketMessage {
     Status(String),
     State,
     Reload,
-    Reset(String),
+    Reset(Vec<String>),
 }

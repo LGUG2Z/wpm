@@ -18,6 +18,7 @@ pub enum UnitState {
     Stopped,
     Completed,
     Failed,
+    Terminated,
 }
 
 impl Display for UnitState {
@@ -27,6 +28,7 @@ impl Display for UnitState {
             UnitState::Stopped => write!(f, "Stopped"),
             UnitState::Completed => write!(f, "Completed"),
             UnitState::Failed => write!(f, "Failed"),
+            UnitState::Terminated => write!(f, "Terminated"),
         }
     }
 }

@@ -38,6 +38,7 @@ macro_rules! gen_unit_subcommands {
 gen_unit_subcommands! {
     Start,
     Stop,
+    Reset,
 }
 
 #[derive(Parser)]
@@ -60,12 +61,15 @@ enum SubCommand {
     /// Generate some example wpm units
     #[clap(hide = true)]
     Examplegen,
-    /// Start a unit
+    /// Start units
     #[clap(arg_required_else_help = true)]
     Start(Start),
-    /// Stop a unit
+    /// Stop unit
     #[clap(arg_required_else_help = true)]
     Stop(Stop),
+    /// Reset units
+    #[clap(arg_required_else_help = true)]
+    Reset(Reset),
     /// Show the state of the process manager
     State,
     /// Show status of a unit
@@ -119,6 +123,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         SubCommand::Stop(args) => {
             send_message("wpmd.sock", SocketMessage::Stop(args.units))?;
+        }
+        SubCommand::Reset(args) => {
+            send_message("wpmd.sock", SocketMessage::Reset(args.units))?;
         }
         SubCommand::Status(args) => {
             send_message("wpmd.sock", SocketMessage::Status(args.unit.clone()))?;

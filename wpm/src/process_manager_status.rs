@@ -53,6 +53,14 @@ impl ProcessManagerStatus {
                             format!("  Log file: {}", log_path.to_string_lossy()),
                         ]);
                     }
+                    UnitState::Terminated => {
+                        output.append(&mut vec![
+                            format!("● Status of {name}:"),
+                            format!("  Kind: {}", definition.service.kind),
+                            format!("  State: Terminated at {}", status.timestamp),
+                            format!("  Log file: {}", log_path.to_string_lossy()),
+                        ]);
+                    }
                 }
 
                 if let Some(args) = &definition.service.arguments {

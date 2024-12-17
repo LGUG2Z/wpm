@@ -71,6 +71,7 @@ impl Definition {
         &self,
         running: Arc<Mutex<HashMap<String, ProcessState>>>,
         completed: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
+        terminated: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
     ) -> Result<Arc<SharedChild>, ProcessManagerError> {
         let name = self.unit.name.to_string();
         tracing::info!("{name}: starting unit");
@@ -80,35 +81,70 @@ impl Definition {
         let thread_child = Arc::new(child);
         let state_child = thread_child.clone();
 
-        let kind = self.service.kind;
-
         let completed_thread = completed.clone();
         let running_thread = running.clone();
+        let terminated_thread = terminated.clone();
 
-        if matches!(kind, ServiceKind::Oneshot) {
-            std::thread::spawn(move || {
-                match thread_child.wait() {
-                    Ok(exit_status) => {
-                        if exit_status.success() {
-                            completed_thread.lock().insert(name.clone(), Utc::now());
-                            tracing::info!(
-                                "{name}: oneshot unit terminated with successful exit code {}",
-                                exit_status.code().unwrap()
-                            );
-                        } else {
-                            tracing::warn!(
-                                "{name}: oneshot unit terminated with failure exit code {}",
-                                exit_status.code().unwrap()
-                            );
+        match self.service.kind {
+            ServiceKind::Simple => {
+                std::thread::spawn(move || {
+                    match thread_child.wait() {
+                        Ok(exit_status) => {
+                            // only want to mark units not terminated via the wpmctl stop command
+                            if running_thread.lock().contains_key(&name) {
+                                if exit_status.success() {
+                                    tracing::warn!(
+                                        "{name}: process {} terminated with success exit code {}",
+                                        thread_child.id(),
+                                        // this is safe on Windows apparently
+                                        exit_status.code().unwrap()
+                                    );
+                                } else {
+                                    tracing::warn!(
+                                        "{name}: process {} terminated with failure exit code {}",
+                                        thread_child.id(),
+                                        // this is safe on Windows apparently
+                                        exit_status.code().unwrap()
+                                    );
+                                }
+
+                                terminated_thread.lock().insert(name.clone(), Utc::now());
+                                // TODO: act on some kind of restart hooks passed via unit definition here
+                            }
+                        }
+                        Err(error) => {
+                            tracing::error!("{name}: {error}");
                         }
                     }
-                    Err(error) => {
-                        tracing::error!("{name}: {error}");
-                    }
-                }
 
-                running_thread.lock().remove(&name);
-            });
+                    running_thread.lock().remove(&name);
+                });
+            }
+            ServiceKind::Oneshot => {
+                std::thread::spawn(move || {
+                    match thread_child.wait() {
+                        Ok(exit_status) => {
+                            if exit_status.success() {
+                                completed_thread.lock().insert(name.clone(), Utc::now());
+                                tracing::info!(
+                                    "{name}: oneshot unit terminated with successful exit code {}",
+                                    exit_status.code().unwrap()
+                                );
+                            } else {
+                                tracing::warn!(
+                                    "{name}: oneshot unit terminated with failure exit code {}",
+                                    exit_status.code().unwrap()
+                                );
+                            }
+                        }
+                        Err(error) => {
+                            tracing::error!("{name}: {error}");
+                        }
+                    }
+
+                    running_thread.lock().remove(&name);
+                });
+            }
         }
 
         Ok(state_child)

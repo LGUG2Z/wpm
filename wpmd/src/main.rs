@@ -172,7 +172,9 @@ fn handle_connection(pm: Arc<Mutex<ProcessManager>>, conn: Stream) -> Result<(),
                     pm.load_units()?;
                 }
                 SocketMessage::Reset(arg) => {
-                    pm.reset(&arg);
+                    for name in arg {
+                        pm.reset(&name);
+                    }
                 }
             }
         }

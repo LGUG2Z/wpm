@@ -25,6 +25,8 @@ pub enum ProcessManagerError {
     CompletedUnit(String),
     #[error("{0} is marked as failed; reset unit before trying again")]
     FailedUnit(String),
+    #[error("{0} is marked as terminated; reset unit before trying again")]
+    TerminatedUnit(String),
     #[error("{0} failed its healthcheck; reset unit before trying again")]
     FailedHealthcheck(String),
     #[error("{0} is not running")]
@@ -37,6 +39,7 @@ pub enum ProcessManagerError {
     NoHandle(String),
 }
 
+#[derive(Clone)]
 pub struct ProcessState {
     pub child: Arc<SharedChild>,
     pub timestamp: DateTime<Utc>,
@@ -47,6 +50,7 @@ pub struct ProcessManager {
     running: Arc<Mutex<HashMap<String, ProcessState>>>,
     completed: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
     failed: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
+    terminated: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
 }
 
 impl ProcessManager {
@@ -79,6 +83,7 @@ impl ProcessManager {
             running: Arc::new(Default::default()),
             completed: Arc::new(Default::default()),
             failed: Arc::new(Default::default()),
+            terminated: Arc::new(Default::default()),
         };
 
         pm.load_units()?;
@@ -241,6 +246,10 @@ impl ProcessManager {
             return Err(ProcessManagerError::FailedUnit(name.to_string()));
         }
 
+        if self.terminated.lock().contains_key(name) {
+            return Err(ProcessManagerError::TerminatedUnit(name.to_string()));
+        }
+
         for dep in definition.unit.requires.iter().flatten() {
             tracing::info!("{name}: requires {dep}");
             let dependency = self
@@ -254,7 +263,11 @@ impl ProcessManager {
             }
         }
 
-        let id = definition.execute(self.running.clone(), self.completed.clone())?;
+        let id = definition.execute(
+            self.running.clone(),
+            self.completed.clone(),
+            self.terminated.clone(),
+        )?;
 
         definition.healthcheck(id.clone(), self.running.clone(), self.failed.clone())?;
 
@@ -272,6 +285,7 @@ impl ProcessManager {
 
         let proc_state = running
             .get(name)
+            .cloned()
             .ok_or(ProcessManagerError::NotRunning(name.to_string()))?;
 
         let id = proc_state.child.id();
@@ -303,12 +317,23 @@ impl ProcessManager {
 
         tracing::info!("{name}: sending kill signal to {id}");
 
-        proc_state.child.kill()?;
-        proc_state.child.wait()?;
+        // remove first to avoid race condition with the other child.wait()
+        // call spawned in a thread by Unit.execute()
+        let tmp_proc_state = running.remove(name).unwrap();
+
+        if let Err(error) = proc_state.child.kill() {
+            // If there are any errors in killing the process, it's still considered to be running
+            // so we reinsert before returning the errors
+            running.insert(name.to_string(), tmp_proc_state);
+            return Err(error.into());
+        }
+
+        if let Err(error) = proc_state.child.wait() {
+            running.insert(name.to_string(), tmp_proc_state);
+            return Err(error.into());
+        }
 
         tracing::info!("{name}: process {id} successfully terminated");
-
-        running.remove(name);
 
         Ok(())
     }
@@ -317,6 +342,7 @@ impl ProcessManager {
         tracing::info!("{name}: resetting unit");
         self.completed.lock().remove(name);
         self.failed.lock().remove(name);
+        self.terminated.lock().remove(name);
     }
 
     pub fn shutdown(&mut self) -> Result<(), ProcessManagerError> {
@@ -343,6 +369,7 @@ impl ProcessManager {
         let running = self.running.lock();
         let completed = self.completed.lock();
         let failed = self.failed.lock();
+        let terminated = self.terminated.lock();
 
         for (name, def) in &self.definitions {
             if let Some(proc_state) = running.get(name) {
@@ -380,6 +407,19 @@ impl ProcessManager {
                         name: name.clone(),
                         kind: def.service.kind,
                         state: UnitState::Failed,
+                        pid: DisplayedOption(None),
+                        timestamp: DisplayedOption(Some(local.to_string())),
+                    },
+                ))
+            } else if let Some(timestamp) = terminated.get(name) {
+                let local: DateTime<Local> = DateTime::from(*timestamp);
+
+                units.push((
+                    def.clone(),
+                    UnitStatus {
+                        name: name.clone(),
+                        kind: def.service.kind,
+                        state: UnitState::Terminated,
                         pid: DisplayedOption(None),
                         timestamp: DisplayedOption(Some(local.to_string())),
                     },
