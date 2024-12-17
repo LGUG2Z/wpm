@@ -26,6 +26,8 @@ Simple user process management for Windows.
   </a>
 </p>
 
+[![Watch the introduction video](https://img.youtube.com/vi/uY8OwE4XXHs/hqdefault.jpg)](https://www.youtube.com/watch?v=uY8OwE4XXHs)
+
 _wpm_ is a simple user process manager for Microsoft Windows 11 and above.
 
 _wpm_ allows you to start, stop and manage user level background processes as defined in unit files.
