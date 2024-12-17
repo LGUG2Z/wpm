@@ -1,5 +1,6 @@
 use crate::process_manager_status::ProcessManagerStatus;
 use crate::unit::Definition;
+use crate::unit::Healthcheck;
 use crate::unit_status::DisplayedOption;
 use crate::unit_status::UnitState;
 use crate::unit_status::UnitStatus;
@@ -60,6 +61,18 @@ impl ProcessManager {
         dir
     }
 
+    fn find_exe(exe_name: &PathBuf) -> Option<PathBuf> {
+        if let Ok(paths) = std::env::var("PATH") {
+            for path in std::env::split_paths(&paths) {
+                let full_path = path.join(exe_name);
+                if full_path.is_file() {
+                    return Some(full_path);
+                }
+            }
+        }
+        None
+    }
+
     pub fn init() -> Result<Self, ProcessManagerError> {
         let mut pm = ProcessManager {
             definitions: Default::default(),
@@ -104,8 +117,8 @@ impl ProcessManager {
         }
 
         for path in units {
-            let mut unit: Definition = toml::from_str(&std::fs::read_to_string(path)?)?;
-            for arg in unit.service.arguments.iter_mut().flatten() {
+            let mut definition: Definition = toml::from_str(&std::fs::read_to_string(path)?)?;
+            for arg in definition.service.arguments.iter_mut().flatten() {
                 *arg = arg.replace(
                     "$USERPROFILE",
                     dirs::home_dir()
@@ -115,7 +128,7 @@ impl ProcessManager {
                 );
             }
 
-            for (_, value) in unit.service.environment.iter_mut().flatten() {
+            for (_, value) in definition.service.environment.iter_mut().flatten() {
                 *value = value.replace(
                     "$USERPROFILE",
                     dirs::home_dir()
@@ -125,7 +138,78 @@ impl ProcessManager {
                 );
             }
 
-            self.register(unit);
+            if definition.service.executable.canonicalize().is_err() {
+                match Self::find_exe(&definition.service.executable) {
+                    Some(path) => definition.service.executable = path,
+                    None => {
+                        tracing::warn!(
+                            "{}: could not find executable in $PATH, skipping unit",
+                            definition.unit.name
+                        );
+                        continue;
+                    }
+                }
+            }
+
+            if let Some(shutdowns) = &mut definition.service.shutdown {
+                for s in shutdowns {
+                    let mut components = s.split_whitespace().collect::<Vec<_>>();
+                    let mut executable = String::new();
+                    if let Some(exe) = components.first() {
+                        let mut exe = exe.to_string();
+                        if !exe.ends_with(".exe") {
+                            exe = format!("{exe}.exe");
+                        }
+
+                        let exe = PathBuf::from(exe);
+                        if exe.canonicalize().is_err() {
+                            match Self::find_exe(&exe) {
+                                Some(path) => executable = path.to_string_lossy().to_string(),
+                                None => {
+                                    tracing::warn!("{}: could not find shutdown command executable in $PATH, skipping unit", definition.unit.name);
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+
+                    if !executable.is_empty() {
+                        components[0] = &executable;
+                    }
+
+                    *s = components.join(" ");
+                }
+            }
+
+            if let Healthcheck::Command(c) = &mut definition.service.healthcheck {
+                let mut components = c.split_whitespace().collect::<Vec<_>>();
+                let mut executable = String::new();
+                if let Some(exe) = components.first() {
+                    let mut exe = exe.to_string();
+                    if !exe.ends_with(".exe") {
+                        exe = format!("{exe}.exe");
+                    }
+
+                    let exe = PathBuf::from(exe);
+                    if exe.canonicalize().is_err() {
+                        match Self::find_exe(&exe) {
+                            Some(path) => executable = path.to_string_lossy().to_string(),
+                            None => {
+                                tracing::warn!("{}: could not find healthcheck executable in $PATH, skipping unit", definition.unit.name);
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                if !executable.is_empty() {
+                    components[0] = &executable;
+                }
+
+                *c = components.join(" ");
+            }
+
+            self.register(definition);
         }
 
         Ok(())

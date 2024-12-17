@@ -57,6 +57,8 @@ pub struct Service {
     pub arguments: Option<Vec<String>>,
     /// Environment variables for this service definition
     pub environment: Option<Vec<(String, String)>>,
+    /// Working directory for this service definition
+    pub working_directory: Option<PathBuf>,
     #[serde(default)]
     /// Healthcheck for this service definition
     pub healthcheck: Healthcheck,
@@ -258,6 +260,10 @@ impl From<&Definition> for Command {
 
         if let Some(arguments) = &value.service.arguments {
             command.args(arguments);
+        }
+
+        if let Some(working_directory) = &value.service.working_directory {
+            command.current_dir(working_directory);
         }
 
         command.creation_flags(CREATE_NO_WINDOW);

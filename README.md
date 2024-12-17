@@ -101,10 +101,11 @@ komorebic focus right
 ❯ wpmctl status kanata
 ● Status of kanata:
   Kind: Simple
-  State: Running since 2024-12-16 15:46:39.132490800 -08:00
-  PID: 37116
+  State: Running since 2024-12-16 17:20:01.796661100 -08:00
+  PID: 41704
   Log file: C:\Users\LGUG2Z\.config\wpm\logs\kanata.log
-  Command: kanata.exe -c C:\Users\LGUG2Z\minimal.kbd --port 9999
+  Command: C:\Users\LGUG2Z\.cargo\bin\kanata.exe -c C:\Users\LGUG2Z\minimal.kbd --port 9999
+  Healthcheck: Liveness check after 1s
 
 Recent logs:
   15:46:38.0790 [INFO] Sleeping for 2s. Please release all keys and don't press additional ones. Run kanata with --help to see how understand more and how to disable this sleep.
