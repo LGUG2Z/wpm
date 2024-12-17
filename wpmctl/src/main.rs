@@ -39,6 +39,7 @@ gen_unit_subcommands! {
     Start,
     Stop,
     Reset,
+    Restart
 }
 
 #[derive(Parser)]
@@ -64,9 +65,12 @@ enum SubCommand {
     /// Start units
     #[clap(arg_required_else_help = true)]
     Start(Start),
-    /// Stop unit
+    /// Stop units
     #[clap(arg_required_else_help = true)]
     Stop(Stop),
+    /// Restart units
+    #[clap(arg_required_else_help = true)]
+    Restart(Restart),
     /// Reset units
     #[clap(arg_required_else_help = true)]
     Reset(Reset),
@@ -123,6 +127,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         SubCommand::Stop(args) => {
             send_message("wpmd.sock", SocketMessage::Stop(args.units))?;
+        }
+        SubCommand::Restart(args) => {
+            send_message("wpmd.sock", SocketMessage::Restart(args.units))?;
         }
         SubCommand::Reset(args) => {
             send_message("wpmd.sock", SocketMessage::Reset(args.units))?;

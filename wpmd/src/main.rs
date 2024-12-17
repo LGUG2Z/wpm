@@ -160,6 +160,12 @@ fn handle_connection(pm: Arc<Mutex<ProcessManager>>, conn: Stream) -> Result<(),
                         pm.stop(&name)?;
                     }
                 }
+                SocketMessage::Restart(arg) => {
+                    for name in arg {
+                        pm.stop(&name)?;
+                        pm.start(&name)?;
+                    }
+                }
                 SocketMessage::Status(arg) => {
                     let status_message = pm.state().unit_status(&arg)?;
                     send_str("wpmctl.sock", &status_message)?;
