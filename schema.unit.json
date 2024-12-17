@@ -97,12 +97,32 @@
           }
         },
         "ExecStart": {
-          "description": "Executable name or absolute path to an executable",
+          "description": "Command executed by this service definition",
           "allOf": [
             {
               "$ref": "#/definitions/ServiceCommand"
             }
           ]
+        },
+        "ExecStartPost": {
+          "description": "Commands executed after ExecStart in this service definition",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/ServiceCommand"
+          }
+        },
+        "ExecStartPre": {
+          "description": "Commands executed before ExecStart in this service definition",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/ServiceCommand"
+          }
         },
         "ExecStop": {
           "description": "Shutdown commands for this service definition",

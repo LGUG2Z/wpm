@@ -313,7 +313,7 @@ impl ProcessManager {
                     command.executable.to_string_lossy().to_string()
                 };
 
-                tracing::info!("{name}: running shutdown command - {stringified}");
+                tracing::info!("{name}: executing shutdown command - {stringified}");
                 let mut command = command.to_silent_command(unit.service.environment.clone());
                 command.output()?;
             }
@@ -351,7 +351,7 @@ impl ProcessManager {
                     command.executable.to_string_lossy().to_string()
                 };
 
-                tracing::info!("{name}: running cleanup command - {stringified}");
+                tracing::info!("{name}: executing cleanup command - {stringified}");
                 let mut command = command.to_silent_command(unit.service.environment.clone());
                 command.output()?;
             }

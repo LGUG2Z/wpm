@@ -69,8 +69,16 @@ pub struct Service {
     #[serde(default)]
     #[serde(skip_serializing_if = "<&bool>::not")]
     pub autostart: bool,
-    /// Executable name or absolute path to an executable
+    /// Commands executed before ExecStart in this service definition
+    pub exec_start_pre: Option<Vec<ServiceCommand>>,
+    /// Command executed by this service definition
     pub exec_start: ServiceCommand,
+    /// Commands executed after ExecStart in this service definition
+    pub exec_start_post: Option<Vec<ServiceCommand>>,
+    /// Shutdown commands for this service definition
+    pub exec_stop: Option<Vec<ServiceCommand>>,
+    /// Post-shutdown cleanup commands for this service definition
+    pub exec_stop_post: Option<Vec<ServiceCommand>>,
     /// Environment variables inherited by all commands in this service definition
     pub environment: Option<Vec<(String, String)>>,
     /// Working directory for this service definition
@@ -84,10 +92,6 @@ pub struct Service {
     /// Time to sleep in seconds before attempting to restart service (default: 1s)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub restart_sec: Option<u64>,
-    /// Shutdown commands for this service definition
-    pub exec_stop: Option<Vec<ServiceCommand>>,
-    /// Post-shutdown cleanup commands for this service definition
-    pub exec_stop_post: Option<Vec<ServiceCommand>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, JsonSchema)]
@@ -134,6 +138,22 @@ impl Definition {
         let name = self.unit.name.to_string();
         tracing::info!("{name}: starting unit");
 
+        for command in self.service.exec_start_pre.iter().flatten() {
+            let stringified = if let Some(args) = &command.arguments {
+                format!(
+                    "{} {}",
+                    command.executable.to_string_lossy(),
+                    args.join(" ")
+                )
+            } else {
+                command.executable.to_string_lossy().to_string()
+            };
+
+            tracing::info!("{name}: executing pre-start command - {stringified}");
+            let mut command = command.to_silent_command(self.service.environment.clone());
+            command.output()?;
+        }
+
         let mut command = Command::from(self);
         let child = SharedChild::spawn(&mut command)?;
         let thread_child = Arc::new(child);
@@ -142,6 +162,9 @@ impl Definition {
         let completed_thread = completed.clone();
         let running_thread = running.clone();
         let terminated_thread = terminated.clone();
+        let exec_start_post_thread = self.service.exec_start_post.clone();
+        let exec_stop_post_thread = self.service.exec_stop_post.clone();
+        let environment_thread = self.service.environment.clone();
 
         let restart_strategy = self.service.restart;
         let restart_sec = self.service.restart_sec.unwrap_or(1);
@@ -152,6 +175,24 @@ impl Definition {
                     match thread_child.wait() {
                         Ok(exit_status) => {
                             let mut should_restart = false;
+
+                            for command in exec_stop_post_thread.iter().flatten() {
+                                let stringified = if let Some(args) = &command.arguments {
+                                    format!(
+                                        "{} {}",
+                                        command.executable.to_string_lossy(),
+                                        args.join(" ")
+                                    )
+                                } else {
+                                    command.executable.to_string_lossy().to_string()
+                                };
+
+                                tracing::info!("{name}: executing cleanup command - {stringified}");
+                                let mut command =
+                                    command.to_silent_command(environment_thread.clone());
+                                let _ = command.output();
+                            }
+
                             // only want to mark units not terminated via the wpmctl stop command
                             if running_thread.lock().contains_key(&name) {
                                 if exit_status.success() {
@@ -226,6 +267,25 @@ impl Definition {
                                     "{name}: oneshot unit terminated with successful exit code {}",
                                     exit_status.code().unwrap()
                                 );
+
+                                for command in exec_start_post_thread.iter().flatten() {
+                                    let stringified = if let Some(args) = &command.arguments {
+                                        format!(
+                                            "{} {}",
+                                            command.executable.to_string_lossy(),
+                                            args.join(" ")
+                                        )
+                                    } else {
+                                        command.executable.to_string_lossy().to_string()
+                                    };
+
+                                    tracing::info!(
+                                        "{name}: executing post-start command - {stringified}"
+                                    );
+                                    let mut command =
+                                        command.to_silent_command(environment_thread.clone());
+                                    let _ = command.output();
+                                }
                             } else {
                                 tracing::warn!(
                                     "{name}: oneshot unit terminated with failure exit code {}",
@@ -323,6 +383,23 @@ impl Definition {
                     timestamp: Utc::now(),
                 },
             );
+
+            for command in self.service.exec_start_post.iter().flatten() {
+                let stringified = if let Some(args) = &command.arguments {
+                    format!(
+                        "{} {}",
+                        command.executable.to_string_lossy(),
+                        args.join(" ")
+                    )
+                } else {
+                    command.executable.to_string_lossy().to_string()
+                };
+
+                tracing::info!("{name}: executing post-start command - {stringified}");
+
+                let mut command = command.to_silent_command(self.service.environment.clone());
+                command.output()?;
+            }
         } else {
             tracing::warn!("{name}: failed healthcheck");
             failed.lock().insert(name.clone(), Utc::now());

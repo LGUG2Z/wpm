@@ -43,6 +43,8 @@ impl Definition {
                     exec_stop: None,
                     exec_stop_post: None,
                     autostart: false,
+                    exec_start_pre: None,
+                    exec_start_post: None,
                 },
             },
             Self {
@@ -66,6 +68,8 @@ impl Definition {
                     exec_stop: None,
                     exec_stop_post: None,
                     autostart: false,
+                    exec_start_pre: None,
+                    exec_start_post: None,
                 },
             },
             Self {
@@ -95,6 +99,8 @@ impl Definition {
                     exec_stop: None,
                     exec_stop_post: None,
                     autostart: false,
+                    exec_start_pre: None,
+                    exec_start_post: None,
                 },
             },
             Self {
@@ -136,6 +142,8 @@ impl Definition {
                         environment: None,
                     }]),
                     autostart: false,
+                    exec_start_pre: None,
+                    exec_start_post: None,
                 },
             },
             Self {
@@ -159,6 +167,8 @@ impl Definition {
                     exec_stop: None,
                     exec_stop_post: None,
                     autostart: false,
+                    exec_start_pre: None,
+                    exec_start_post: None,
                 },
             },
             Self {
@@ -185,6 +195,8 @@ impl Definition {
                     exec_stop: None,
                     exec_stop_post: None,
                     autostart: true,
+                    exec_start_pre: None,
+                    exec_start_post: None,
                 },
             },
         ];

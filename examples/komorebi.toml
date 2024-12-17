@@ -21,10 +21,6 @@ Environment = [[
     "$USERPROFILE/.config/komorebi",
 ]]
 
-[Service.Healthcheck.Command]
-Executable = "komorebic.exe"
-Arguments = ["state"]
-
 [[Service.ExecStop]]
 Executable = "komorebic.exe"
 Arguments = ["stop"]
@@ -32,3 +28,7 @@ Arguments = ["stop"]
 [[Service.ExecStopPost]]
 Executable = "komorebic.exe"
 Arguments = ["restore-windows"]
+
+[Service.Healthcheck.Command]
+Executable = "komorebic.exe"
+Arguments = ["state"]
