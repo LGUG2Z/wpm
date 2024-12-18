@@ -365,9 +365,8 @@ impl Definition {
                     true,
                     ProcessRefreshKind::everything(),
                 );
-                if system.process(pid).is_none() {
-                    failed.lock().insert(self.unit.name.clone(), Utc::now());
-                } else {
+
+                if system.process(pid).is_some() {
                     passed = true;
                 }
             }
@@ -403,7 +402,7 @@ impl Definition {
         } else {
             tracing::warn!("{name}: failed healthcheck");
             failed.lock().insert(name.clone(), Utc::now());
-            return Err(ProcessManagerError::FailedUnit(name.to_string()));
+            return Err(ProcessManagerError::FailedHealthcheck(name.to_string()));
         }
 
         Ok(())

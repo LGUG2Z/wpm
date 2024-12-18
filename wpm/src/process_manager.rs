@@ -28,10 +28,6 @@ pub enum ProcessManagerError {
     RunningUnit(String),
     #[error("{0} is marked as completed; reset unit before trying again")]
     CompletedUnit(String),
-    #[error("{0} is marked as failed; reset unit before trying again")]
-    FailedUnit(String),
-    #[error("{0} is marked as terminated; reset unit before trying again")]
-    TerminatedUnit(String),
     #[error("{0} failed its healthcheck; reset unit before trying again")]
     FailedHealthcheck(String),
     #[error("{0} is not running")]
@@ -251,13 +247,8 @@ impl ProcessManager {
             return Err(ProcessManagerError::CompletedUnit(name.to_string()));
         }
 
-        if self.failed.lock().contains_key(name) {
-            return Err(ProcessManagerError::FailedUnit(name.to_string()));
-        }
-
-        if self.terminated.lock().contains_key(name) {
-            return Err(ProcessManagerError::TerminatedUnit(name.to_string()));
-        }
+        self.failed.lock().remove(name);
+        self.terminated.lock().remove(name);
 
         for dep in definition.unit.requires.iter().flatten() {
             tracing::info!("{name}: requires {dep}");
