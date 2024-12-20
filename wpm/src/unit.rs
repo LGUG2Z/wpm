@@ -94,7 +94,7 @@ pub struct Service {
     pub restart_sec: Option<u64>,
 }
 
-#[derive(Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 /// A wpm definition command
 #[serde(rename_all = "PascalCase")]
 pub struct ServiceCommand {
@@ -107,6 +107,27 @@ pub struct ServiceCommand {
 }
 
 impl ServiceCommand {
+    pub fn resolve_user_profile(&mut self) {
+        let home_dir = dirs::home_dir()
+            .expect("could not find home dir")
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        let stringified = self.executable.to_string_lossy();
+        let stringified = stringified.replace("$USERPROFILE", &home_dir);
+        let executable = PathBuf::from(stringified);
+        self.executable = executable;
+
+        for arg in self.arguments.iter_mut().flatten() {
+            *arg = arg.replace("$USERPROFILE", &home_dir);
+        }
+
+        for (_, value) in self.environment.iter_mut().flatten() {
+            *value = value.replace("$USERPROFILE", &home_dir);
+        }
+    }
+
     pub fn to_silent_command(&self, global_environment: Option<Vec<(String, String)>>) -> Command {
         let mut command = Command::new(&self.executable);
         if let Some(arguments) = &self.arguments {

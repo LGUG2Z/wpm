@@ -68,12 +68,22 @@ impl ProcessManagerStatus {
                     let arguments = arguments.replace("/", "\\");
                     output.push(format!(
                         "  ExecStart: {} {arguments}",
-                        definition.service.exec_start.executable.to_string_lossy()
+                        definition
+                            .service
+                            .exec_start
+                            .executable
+                            .to_string_lossy()
+                            .replace("/", "\\")
                     ));
                 } else {
                     output.push(format!(
                         "  ExecStart: {}",
-                        definition.service.exec_start.executable.to_string_lossy()
+                        definition
+                            .service
+                            .exec_start
+                            .executable
+                            .to_string_lossy()
+                            .replace("/", "\\")
                     ));
                 }
 

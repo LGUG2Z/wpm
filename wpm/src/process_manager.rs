@@ -14,6 +14,7 @@ use chrono::Utc;
 use parking_lot::Mutex;
 use shared_child::SharedChild;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -66,7 +67,7 @@ impl ProcessManager {
         dir
     }
 
-    fn find_exe(exe_name: &Path) -> Option<PathBuf> {
+    pub(crate) fn find_exe(exe_name: &Path) -> Option<PathBuf> {
         let mut name = exe_name.to_path_buf();
         if name.extension().is_none() {
             name = exe_name.with_extension("exe");
@@ -117,29 +118,44 @@ impl ProcessManager {
 
     pub fn load_units(&mut self) -> Result<(), ProcessManagerError> {
         let read_dir = std::fs::read_dir(Self::unit_directory())?;
-        let home_dir = dirs::home_dir()
-            .expect("could not find home dir")
-            .to_str()
-            .unwrap()
-            .to_string();
 
         let mut units = vec![];
 
         for entry in read_dir.flatten() {
             let path = entry.path();
-            if path.is_file() && path.extension() == Some(std::ffi::OsStr::new("toml")) {
+            if path.is_file() && path.extension() == Some(OsStr::new("toml")) {
                 units.push(path)
             }
         }
 
         for path in units {
             let mut definition: Definition = toml::from_str(&std::fs::read_to_string(path)?)?;
-            for arg in definition.service.exec_start.arguments.iter_mut().flatten() {
-                *arg = arg.replace("$USERPROFILE", &home_dir);
-            }
+            let home_dir = dirs::home_dir()
+                .expect("could not find home dir")
+                .to_str()
+                .unwrap()
+                .to_string();
 
             for (_, value) in definition.service.environment.iter_mut().flatten() {
                 *value = value.replace("$USERPROFILE", &home_dir);
+            }
+
+            for cmd in definition.service.exec_start_pre.iter_mut().flatten() {
+                cmd.resolve_user_profile();
+            }
+
+            definition.service.exec_start.resolve_user_profile();
+
+            for cmd in definition.service.exec_start_post.iter_mut().flatten() {
+                cmd.resolve_user_profile();
+            }
+
+            for cmd in definition.service.exec_stop.iter_mut().flatten() {
+                cmd.resolve_user_profile();
+            }
+
+            for cmd in definition.service.exec_stop_post.iter_mut().flatten() {
+                cmd.resolve_user_profile();
             }
 
             if definition
@@ -161,6 +177,36 @@ impl ProcessManager {
                 }
             }
 
+            for command in definition.service.exec_start_pre.iter_mut().flatten() {
+                if command.executable.canonicalize().is_err() {
+                    match Self::find_exe(&command.executable) {
+                        Some(path) => command.executable = path,
+                        None => {
+                            tracing::warn!(
+                            "{}: could not find pre-start command executable in $PATH, skipping unit",
+                            definition.unit.name
+                        );
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            for command in definition.service.exec_start_post.iter_mut().flatten() {
+                if command.executable.canonicalize().is_err() {
+                    match Self::find_exe(&command.executable) {
+                        Some(path) => command.executable = path,
+                        None => {
+                            tracing::warn!(
+                            "{}: could not find post-start command executable in $PATH, skipping unit",
+                            definition.unit.name
+                        );
+                            continue;
+                        }
+                    }
+                }
+            }
+
             for command in definition.service.exec_stop.iter_mut().flatten() {
                 if command.executable.canonicalize().is_err() {
                     match Self::find_exe(&command.executable) {
@@ -174,13 +220,20 @@ impl ProcessManager {
                         }
                     }
                 }
+            }
 
-                for arg in command.arguments.iter_mut().flatten() {
-                    *arg = arg.replace("$USERPROFILE", &home_dir);
-                }
-
-                for (_, value) in command.environment.iter_mut().flatten() {
-                    *value = value.replace("$USERPROFILE", &home_dir);
+            for command in definition.service.exec_stop_post.iter_mut().flatten() {
+                if command.executable.canonicalize().is_err() {
+                    match Self::find_exe(&command.executable) {
+                        Some(path) => command.executable = path,
+                        None => {
+                            tracing::warn!(
+                            "{}: could not find cleanup command executable in $PATH, skipping unit",
+                            definition.unit.name
+                        );
+                            continue;
+                        }
+                    }
                 }
             }
 
@@ -197,6 +250,8 @@ impl ProcessManager {
             }
 
             if let Some(Healthcheck::Command(command)) = &mut definition.service.healthcheck {
+                command.resolve_user_profile();
+
                 if command.executable.canonicalize().is_err() {
                     match Self::find_exe(&command.executable) {
                         Some(path) => command.executable = path,
@@ -208,14 +263,6 @@ impl ProcessManager {
                             continue;
                         }
                     }
-                }
-
-                for arg in command.arguments.iter_mut().flatten() {
-                    *arg = arg.replace("$USERPROFILE", &home_dir);
-                }
-
-                for (_, value) in command.environment.iter_mut().flatten() {
-                    *value = value.replace("$USERPROFILE", &home_dir);
                 }
             }
 
