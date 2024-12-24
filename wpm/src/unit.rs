@@ -1,4 +1,5 @@
 use crate::communication::send_message;
+use crate::process_manager::Child;
 use crate::process_manager::ProcessManagerError;
 use crate::process_manager::ProcessState;
 use crate::SocketMessage;
@@ -322,6 +323,45 @@ impl Definition {
                     running_thread.lock().remove(&name);
                 });
             }
+            ServiceKind::Forking => {
+                std::thread::spawn(move || match thread_child.wait() {
+                    Ok(exit_status) => {
+                        if exit_status.success() {
+                            tracing::info!(
+                                "{name}: forking unit terminated with successful exit code {}",
+                                exit_status.code().unwrap()
+                            );
+
+                            for command in exec_start_post_thread.iter().flatten() {
+                                let stringified = if let Some(args) = &command.arguments {
+                                    format!(
+                                        "{} {}",
+                                        command.executable.to_string_lossy(),
+                                        args.join(" ")
+                                    )
+                                } else {
+                                    command.executable.to_string_lossy().to_string()
+                                };
+
+                                tracing::info!(
+                                    "{name}: executing post-start command - {stringified}"
+                                );
+                                let mut command =
+                                    command.to_silent_command(environment_thread.clone());
+                                let _ = command.output();
+                            }
+                        } else {
+                            tracing::warn!(
+                                "{name}: forking unit terminated with failure exit code {}",
+                                exit_status.code().unwrap()
+                            );
+                        }
+                    }
+                    Err(error) => {
+                        tracing::error!("{name}: {error}");
+                    }
+                });
+            }
         }
 
         Ok(state_child)
@@ -332,12 +372,16 @@ impl Definition {
         child: Arc<SharedChild>,
         running: Arc<Mutex<HashMap<String, ProcessState>>>,
         failed: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
+        terminated: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
     ) -> Result<(), ProcessManagerError> {
         let mut passed = false;
         let name = self.unit.name.clone();
 
         // we only want to healthcheck long-running services
-        if !matches!(self.service.kind, ServiceKind::Simple) {
+        if !matches!(
+            self.service.kind,
+            ServiceKind::Simple | ServiceKind::Forking
+        ) {
             return Ok(());
         }
 
@@ -346,6 +390,16 @@ impl Definition {
             tracing::info!("{name}: passed healthcheck");
             return Ok(());
         }
+
+        let mut forked_pid = None;
+
+        let running_thread = running.clone();
+        let terminated_thread = terminated.clone();
+        let exec_stop_post_thread = self.service.exec_stop_post.clone();
+        let environment_thread = self.service.environment.clone();
+
+        let restart_strategy = self.service.restart;
+        let restart_sec = self.service.restart_sec.unwrap_or(1);
 
         match &self.service.healthcheck {
             Some(Healthcheck::Command(healthcheck)) => {
@@ -376,19 +430,153 @@ impl Definition {
                     passed = true;
                 }
             }
-            Some(Healthcheck::LivenessSec(seconds)) => {
-                tracing::info!("{name}: running liveness healthcheck ({seconds}s)");
-                std::thread::sleep(Duration::from_secs(*seconds));
-                let mut system = System::new_all();
-                let pid = Pid::from_u32(child.id());
-                system.refresh_processes_specifics(
-                    ProcessesToUpdate::Some(&[pid]),
-                    true,
-                    ProcessRefreshKind::everything(),
-                );
+            Some(Healthcheck::Process(healthcheck)) => {
+                let seconds = healthcheck.delay_sec;
 
-                if system.process(pid).is_some() {
-                    passed = true;
+                match &healthcheck.target {
+                    None => {
+                        let child_pid = child.id();
+                        tracing::info!(
+                            "{name}: running pid {child_pid} liveness healthcheck ({seconds}s)"
+                        );
+                        std::thread::sleep(Duration::from_secs(healthcheck.delay_sec));
+                        let mut system = System::new_all();
+                        let pid = Pid::from_u32(child_pid);
+                        system.refresh_processes_specifics(
+                            ProcessesToUpdate::Some(&[pid]),
+                            true,
+                            ProcessRefreshKind::everything(),
+                        );
+
+                        if system.process(pid).is_some() {
+                            passed = true;
+                        }
+                    }
+                    Some(target) => {
+                        tracing::info!("{name}: running process liveness healthcheck ({seconds}s)");
+                        std::thread::sleep(Duration::from_secs(healthcheck.delay_sec));
+                        let mut system = System::new_all();
+                        system.refresh_processes_specifics(
+                            ProcessesToUpdate::All,
+                            true,
+                            ProcessRefreshKind::everything(),
+                        );
+
+                        let proc_name = target.file_name().unwrap_or_default();
+
+                        for p in system.processes_by_name(proc_name) {
+                            if forked_pid.is_none() {
+                                forked_pid = Some(p.pid().as_u32());
+                                passed = true;
+                            }
+                        }
+
+                        if let Some(pid) = forked_pid {
+                            let name = self.unit.name.clone();
+                            // TODO: this is a mess, clean it up
+                            std::thread::spawn(move || {
+                                let mut system = System::new_all();
+                                let pid = Pid::from_u32(pid);
+                                system.refresh_processes_specifics(
+                                    ProcessesToUpdate::Some(&[pid]),
+                                    true,
+                                    ProcessRefreshKind::everything(),
+                                );
+
+                                if let Some(process) = system.process(pid) {
+                                    match process.wait() {
+                                        None => {}
+                                        Some(exit_status) => {
+                                            let mut should_restart = false;
+
+                                            for command in exec_stop_post_thread.iter().flatten() {
+                                                let stringified = if let Some(args) =
+                                                    &command.arguments
+                                                {
+                                                    format!(
+                                                        "{} {}",
+                                                        command.executable.to_string_lossy(),
+                                                        args.join(" ")
+                                                    )
+                                                } else {
+                                                    command.executable.to_string_lossy().to_string()
+                                                };
+
+                                                tracing::info!("{name}: executing cleanup command - {stringified}");
+                                                let mut command = command
+                                                    .to_silent_command(environment_thread.clone());
+                                                let _ = command.output();
+                                            }
+
+                                            // only want to mark units not terminated via the wpmctl stop command
+                                            if running_thread.lock().contains_key(&name) {
+                                                if exit_status.success() {
+                                                    tracing::warn!(
+                                                        "{name}: process {pid} terminated with success exit code {}",
+                                                        // this is safe on Windows apparently
+                                                        exit_status.code().unwrap()
+                                                    );
+
+                                                    if matches!(
+                                                        restart_strategy,
+                                                        RestartStrategy::Always
+                                                    ) {
+                                                        should_restart = true;
+                                                    }
+                                                } else {
+                                                    tracing::warn!(
+                                                        "{name}: process {pid} terminated with failure exit code {}",
+                                                        // this is safe on Windows apparently
+                                                        exit_status.code().unwrap()
+                                                    );
+
+                                                    if matches!(
+                                                        restart_strategy,
+                                                        RestartStrategy::Always
+                                                            | RestartStrategy::OnFailure
+                                                    ) {
+                                                        should_restart = true;
+                                                    }
+                                                }
+
+                                                if should_restart {
+                                                    running_thread.lock().remove(&name);
+                                                    tracing::info!("{name}: restarting terminated process in {restart_sec}s");
+
+                                                    std::thread::sleep(Duration::from_secs(
+                                                        restart_sec,
+                                                    ));
+                                                    if let Err(error) = send_message(
+                                                        "wpmd.sock",
+                                                        SocketMessage::Reset(
+                                                            vec![name.to_string()],
+                                                        ),
+                                                    ) {
+                                                        tracing::error!("{name}: {error}");
+                                                    }
+
+                                                    if let Err(error) = send_message(
+                                                        "wpmd.sock",
+                                                        SocketMessage::Start(
+                                                            vec![name.to_string()],
+                                                        ),
+                                                    ) {
+                                                        tracing::error!("{name}: {error}");
+                                                    }
+                                                } else {
+                                                    terminated_thread
+                                                        .lock()
+                                                        .insert(name.clone(), Utc::now());
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    running_thread.lock().remove(&name);
+                                }
+                            });
+                        }
+                    }
                 }
             }
             None => {}
@@ -398,9 +586,15 @@ impl Definition {
             tracing::info!("{name}: passed healthcheck");
             running.lock().insert(
                 name.clone(),
-                ProcessState {
-                    child,
-                    timestamp: Utc::now(),
+                match forked_pid {
+                    None => ProcessState {
+                        child: Child::Shared(child),
+                        timestamp: Utc::now(),
+                    },
+                    Some(pid) => ProcessState {
+                        child: Child::Pid(pid),
+                        timestamp: Utc::now(),
+                    },
                 },
             );
 
@@ -444,12 +638,25 @@ impl Definition {
 #[derive(Serialize, Deserialize, Clone, JsonSchema)]
 pub enum Healthcheck {
     Command(ServiceCommand),
-    LivenessSec(u64),
+    Process(ProcessHealthcheck),
+}
+
+#[derive(Serialize, Deserialize, Clone, JsonSchema)]
+/// A process liveness healthcheck either based on an automatic PID or an optional binary
+#[serde(rename_all = "PascalCase")]
+pub struct ProcessHealthcheck {
+    /// An optional binary with which to check process liveness
+    pub target: Option<PathBuf>,
+    /// The number of seconds to delay before checking for liveness
+    pub delay_sec: u64,
 }
 
 impl Default for Healthcheck {
     fn default() -> Self {
-        Self::LivenessSec(1)
+        Self::Process(ProcessHealthcheck {
+            target: None,
+            delay_sec: 1,
+        })
     }
 }
 
@@ -458,6 +665,7 @@ pub enum ServiceKind {
     #[default]
     Simple,
     Oneshot,
+    Forking,
 }
 
 impl Display for ServiceKind {
@@ -465,6 +673,7 @@ impl Display for ServiceKind {
         match self {
             ServiceKind::Simple => write!(f, "Simple"),
             ServiceKind::Oneshot => write!(f, "Oneshot"),
+            ServiceKind::Forking => write!(f, "Forking"),
         }
     }
 }

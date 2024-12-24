@@ -17,8 +17,11 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::path::PathBuf;
+use std::process::ExitStatus;
 use std::sync::Arc;
 use std::time::Duration;
+use sysinfo::Pid;
+use sysinfo::System;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -39,11 +42,60 @@ pub enum ProcessManagerError {
     Toml(#[from] toml::de::Error),
     #[error("{0} did not spawn a process with a handle")]
     NoHandle(String),
+    #[error("a forking service must have a process healthcheck target defined")]
+    InvalidForkingService,
+    #[error("a simple service cannot have a separate process healthcheck target")]
+    InvalidSimpleService,
+}
+
+#[derive(Clone)]
+pub enum Child {
+    Shared(Arc<SharedChild>),
+    Pid(u32),
+}
+
+impl Child {
+    pub fn id(&self) -> u32 {
+        match self {
+            Child::Shared(shared) => shared.id(),
+            Child::Pid(id) => *id,
+        }
+    }
+
+    pub fn kill(&self) -> std::io::Result<()> {
+        match self {
+            Child::Shared(shared) => shared.kill(),
+            Child::Pid(id) => {
+                let pid = *id;
+                let s = System::new_all();
+                if let Some(process) = s.process(Pid::from_u32(pid)) {
+                    process.kill();
+                }
+
+                Ok(())
+            }
+        }
+    }
+
+    pub fn wait(&self) -> std::io::Result<ExitStatus> {
+        match self {
+            Child::Shared(shared) => shared.wait(),
+            Child::Pid(id) => {
+                let pid = *id;
+                let s = System::new_all();
+                if let Some(process) = s.process(Pid::from_u32(pid)) {
+                    Ok(process.wait().unwrap())
+                } else {
+                    Ok(ExitStatus::default())
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
 pub struct ProcessState {
-    pub child: Arc<SharedChild>,
+    pub child: Child,
     pub timestamp: DateTime<Utc>,
 }
 
@@ -130,6 +182,33 @@ impl ProcessManager {
 
         for path in units {
             let mut definition: Definition = toml::from_str(&std::fs::read_to_string(path)?)?;
+
+            if matches!(definition.service.kind, ServiceKind::Forking) {
+                let mut is_valid_forking_service = false;
+                if let Some(Healthcheck::Process(proc)) = &definition.service.healthcheck {
+                    if proc.target.is_some() {
+                        is_valid_forking_service = true;
+                    }
+                }
+
+                if !is_valid_forking_service {
+                    return Err(ProcessManagerError::InvalidForkingService);
+                }
+            }
+
+            if matches!(definition.service.kind, ServiceKind::Simple) {
+                let mut is_invalid_simple_service = false;
+                if let Some(Healthcheck::Process(proc)) = &definition.service.healthcheck {
+                    if proc.target.is_some() {
+                        is_invalid_simple_service = true;
+                    }
+                }
+
+                if is_invalid_simple_service {
+                    return Err(ProcessManagerError::InvalidSimpleService);
+                }
+            }
+
             let home_dir = dirs::home_dir()
                 .expect("could not find home dir")
                 .to_str()
@@ -316,7 +395,12 @@ impl ProcessManager {
             self.terminated.clone(),
         )?;
 
-        definition.healthcheck(id.clone(), self.running.clone(), self.failed.clone())?;
+        definition.healthcheck(
+            id.clone(),
+            self.running.clone(),
+            self.failed.clone(),
+            self.terminated.clone(),
+        )?;
 
         Ok(id)
     }

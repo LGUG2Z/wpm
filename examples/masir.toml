@@ -10,5 +10,5 @@ Restart = "Never"
 [Service.ExecStart]
 Executable = "masir.exe"
 
-[Service.Healthcheck]
-LivenessSec = 1
+[Service.Healthcheck.Process]
+DelaySec = 1

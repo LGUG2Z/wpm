@@ -15,5 +15,5 @@ Arguments = [
     "9999",
 ]
 
-[Service.Healthcheck]
-LivenessSec = 1
+[Service.Healthcheck.Process]
+DelaySec = 1

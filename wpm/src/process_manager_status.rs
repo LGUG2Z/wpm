@@ -103,8 +103,21 @@ impl ProcessManagerStatus {
                             ));
                         }
                     }
-                    Some(Healthcheck::LivenessSec(seconds)) => {
-                        output.push(format!("  Healthcheck: Liveness check after {seconds}s",));
+                    Some(Healthcheck::Process(healthcheck)) => {
+                        let seconds = healthcheck.delay_sec;
+                        match &healthcheck.target {
+                            None => {
+                                output.push(format!(
+                                    "  Healthcheck: Liveness check after {seconds}s",
+                                ));
+                            }
+                            Some(target) => {
+                                output.push(format!(
+                                    "  Healthcheck: Liveness check for {} after {seconds}s",
+                                    target.display()
+                                ));
+                            }
+                        }
                     }
                     None => {}
                 }

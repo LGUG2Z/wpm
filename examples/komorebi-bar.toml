@@ -18,5 +18,5 @@ Arguments = [
     "$USERPROFILE/.config/komorebi/komorebi.bar.json",
 ]
 
-[Service.Healthcheck]
-LivenessSec = 1
+[Service.Healthcheck.Process]
+DelaySec = 1
