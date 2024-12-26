@@ -21,6 +21,8 @@ use std::process::ExitStatus;
 use std::sync::Arc;
 use std::time::Duration;
 use sysinfo::Pid;
+use sysinfo::ProcessRefreshKind;
+use sysinfo::ProcessesToUpdate;
 use sysinfo::System;
 use thiserror::Error;
 
@@ -79,14 +81,25 @@ impl Child {
 
     pub fn wait(&self) -> std::io::Result<ExitStatus> {
         match self {
-            Child::Shared(shared) => shared.wait(),
-            Child::Pid(id) => {
-                let pid = *id;
-                let s = System::new_all();
-                if let Some(process) = s.process(Pid::from_u32(pid)) {
-                    Ok(process.wait().unwrap())
+            Self::Shared(child) => child.wait(),
+            Self::Pid(pid) => {
+                let mut system = System::new_all();
+                let pid = Pid::from_u32(*pid);
+                system.refresh_processes_specifics(
+                    ProcessesToUpdate::Some(&[pid]),
+                    true,
+                    ProcessRefreshKind::everything(),
+                );
+
+                if let Some(process) = system.process(pid) {
+                    process.wait().ok_or_else(|| {
+                        std::io::Error::new(std::io::ErrorKind::Other, "Process wait returned None")
+                    })
                 } else {
-                    Ok(ExitStatus::default())
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "Process not found",
+                    ))
                 }
             }
         }

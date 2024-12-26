@@ -183,101 +183,16 @@ impl Definition {
 
         let completed_thread = completed.clone();
         let running_thread = running.clone();
-        let terminated_thread = terminated.clone();
         let exec_start_post_thread = self.service.exec_start_post.clone();
-        let exec_stop_post_thread = self.service.exec_stop_post.clone();
         let environment_thread = self.service.environment.clone();
-
-        let restart_strategy = self.service.restart;
-        let restart_sec = self.service.restart_sec.unwrap_or(1);
 
         match self.service.kind {
             ServiceKind::Simple => {
-                std::thread::spawn(move || {
-                    match thread_child.wait() {
-                        Ok(exit_status) => {
-                            let mut should_restart = false;
-
-                            for command in exec_stop_post_thread.iter().flatten() {
-                                let stringified = if let Some(args) = &command.arguments {
-                                    format!(
-                                        "{} {}",
-                                        command.executable.to_string_lossy(),
-                                        args.join(" ")
-                                    )
-                                } else {
-                                    command.executable.to_string_lossy().to_string()
-                                };
-
-                                tracing::info!("{name}: executing cleanup command - {stringified}");
-                                let mut command =
-                                    command.to_silent_command(environment_thread.clone());
-                                let _ = command.output();
-                            }
-
-                            // only want to mark units not terminated via the wpmctl stop command
-                            if running_thread.lock().contains_key(&name) {
-                                if exit_status.success() {
-                                    tracing::warn!(
-                                        "{name}: process {} terminated with success exit code {}",
-                                        thread_child.id(),
-                                        // this is safe on Windows apparently
-                                        exit_status.code().unwrap()
-                                    );
-
-                                    if matches!(restart_strategy, RestartStrategy::Always) {
-                                        should_restart = true;
-                                    }
-                                } else {
-                                    tracing::warn!(
-                                        "{name}: process {} terminated with failure exit code {}",
-                                        thread_child.id(),
-                                        // this is safe on Windows apparently
-                                        exit_status.code().unwrap()
-                                    );
-
-                                    if matches!(
-                                        restart_strategy,
-                                        RestartStrategy::Always | RestartStrategy::OnFailure
-                                    ) {
-                                        should_restart = true;
-                                    }
-                                }
-
-                                if should_restart {
-                                    running_thread.lock().remove(&name);
-                                    tracing::info!(
-                                        "{name}: restarting terminated process in {restart_sec}s"
-                                    );
-
-                                    std::thread::sleep(Duration::from_secs(restart_sec));
-                                    if let Err(error) = send_message(
-                                        "wpmd.sock",
-                                        SocketMessage::Reset(vec![name.to_string()]),
-                                    ) {
-                                        tracing::error!("{name}: {error}");
-                                    }
-
-                                    if let Err(error) = send_message(
-                                        "wpmd.sock",
-                                        SocketMessage::Start(vec![name.to_string()]),
-                                    ) {
-                                        tracing::error!("{name}: {error}");
-                                    }
-
-                                    return;
-                                } else {
-                                    terminated_thread.lock().insert(name.clone(), Utc::now());
-                                }
-                            }
-                        }
-                        Err(error) => {
-                            tracing::error!("{name}: {error}");
-                        }
-                    }
-
-                    running_thread.lock().remove(&name);
-                });
+                self.monitor_child(
+                    Child::Shared(thread_child),
+                    running_thread,
+                    terminated.clone(),
+                );
             }
             ServiceKind::Oneshot => {
                 std::thread::spawn(move || {
@@ -393,14 +308,6 @@ impl Definition {
 
         let mut forked_pid = None;
 
-        let running_thread = running.clone();
-        let terminated_thread = terminated.clone();
-        let exec_stop_post_thread = self.service.exec_stop_post.clone();
-        let environment_thread = self.service.environment.clone();
-
-        let restart_strategy = self.service.restart;
-        let restart_sec = self.service.restart_sec.unwrap_or(1);
-
         match &self.service.healthcheck {
             Some(Healthcheck::Command(healthcheck)) => {
                 let stringified = if let Some(args) = &healthcheck.arguments {
@@ -472,109 +379,7 @@ impl Definition {
                         }
 
                         if let Some(pid) = forked_pid {
-                            let name = self.unit.name.clone();
-                            // TODO: this is a mess, clean it up
-                            std::thread::spawn(move || {
-                                let mut system = System::new_all();
-                                let pid = Pid::from_u32(pid);
-                                system.refresh_processes_specifics(
-                                    ProcessesToUpdate::Some(&[pid]),
-                                    true,
-                                    ProcessRefreshKind::everything(),
-                                );
-
-                                if let Some(process) = system.process(pid) {
-                                    match process.wait() {
-                                        None => {}
-                                        Some(exit_status) => {
-                                            let mut should_restart = false;
-
-                                            for command in exec_stop_post_thread.iter().flatten() {
-                                                let stringified = if let Some(args) =
-                                                    &command.arguments
-                                                {
-                                                    format!(
-                                                        "{} {}",
-                                                        command.executable.to_string_lossy(),
-                                                        args.join(" ")
-                                                    )
-                                                } else {
-                                                    command.executable.to_string_lossy().to_string()
-                                                };
-
-                                                tracing::info!("{name}: executing cleanup command - {stringified}");
-                                                let mut command = command
-                                                    .to_silent_command(environment_thread.clone());
-                                                let _ = command.output();
-                                            }
-
-                                            // only want to mark units not terminated via the wpmctl stop command
-                                            if running_thread.lock().contains_key(&name) {
-                                                if exit_status.success() {
-                                                    tracing::warn!(
-                                                        "{name}: process {pid} terminated with success exit code {}",
-                                                        // this is safe on Windows apparently
-                                                        exit_status.code().unwrap()
-                                                    );
-
-                                                    if matches!(
-                                                        restart_strategy,
-                                                        RestartStrategy::Always
-                                                    ) {
-                                                        should_restart = true;
-                                                    }
-                                                } else {
-                                                    tracing::warn!(
-                                                        "{name}: process {pid} terminated with failure exit code {}",
-                                                        // this is safe on Windows apparently
-                                                        exit_status.code().unwrap()
-                                                    );
-
-                                                    if matches!(
-                                                        restart_strategy,
-                                                        RestartStrategy::Always
-                                                            | RestartStrategy::OnFailure
-                                                    ) {
-                                                        should_restart = true;
-                                                    }
-                                                }
-
-                                                if should_restart {
-                                                    running_thread.lock().remove(&name);
-                                                    tracing::info!("{name}: restarting terminated process in {restart_sec}s");
-
-                                                    std::thread::sleep(Duration::from_secs(
-                                                        restart_sec,
-                                                    ));
-                                                    if let Err(error) = send_message(
-                                                        "wpmd.sock",
-                                                        SocketMessage::Reset(
-                                                            vec![name.to_string()],
-                                                        ),
-                                                    ) {
-                                                        tracing::error!("{name}: {error}");
-                                                    }
-
-                                                    if let Err(error) = send_message(
-                                                        "wpmd.sock",
-                                                        SocketMessage::Start(
-                                                            vec![name.to_string()],
-                                                        ),
-                                                    ) {
-                                                        tracing::error!("{name}: {error}");
-                                                    }
-                                                } else {
-                                                    terminated_thread
-                                                        .lock()
-                                                        .insert(name.clone(), Utc::now());
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    running_thread.lock().remove(&name);
-                                }
-                            });
+                            self.monitor_child(Child::Pid(pid), running.clone(), terminated);
                         }
                     }
                 }
@@ -621,6 +426,97 @@ impl Definition {
         }
 
         Ok(())
+    }
+
+    pub fn monitor_child(
+        &self,
+        child: Child,
+        running: Arc<Mutex<HashMap<String, ProcessState>>>,
+        terminated: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
+    ) {
+        let running_thread = running.clone();
+        let terminated_thread = terminated.clone();
+
+        let name = self.unit.name.clone();
+        let exec_stop_post = self.service.exec_stop_post.clone();
+        let environment = self.service.environment.clone();
+        let restart_strategy = self.service.restart;
+        let restart_sec = self.service.restart_sec.unwrap_or(1);
+
+        std::thread::spawn(move || {
+            match child.wait() {
+                Ok(exit_status) => {
+                    // Execute cleanup commands
+                    for command in exec_stop_post.iter().flatten() {
+                        let stringified = if let Some(args) = &command.arguments {
+                            format!(
+                                "{} {}",
+                                command.executable.to_string_lossy(),
+                                args.join(" ")
+                            )
+                        } else {
+                            command.executable.to_string_lossy().to_string()
+                        };
+
+                        tracing::info!("{name}: executing cleanup command - {stringified}");
+                        let mut command = command.to_silent_command(environment.clone());
+                        let _ = command.output();
+                    }
+
+                    // Handle process termination
+                    if running_thread.lock().contains_key(&name) {
+                        let should_restart = if exit_status.success() {
+                            tracing::warn!(
+                                "{name}: process {} terminated with success exit code {}",
+                                child.id(),
+                                exit_status.code().unwrap()
+                            );
+
+                            matches!(restart_strategy, RestartStrategy::Always)
+                        } else {
+                            tracing::warn!(
+                                "{name}: process {} terminated with failure exit code {}",
+                                child.id(),
+                                exit_status.code().unwrap()
+                            );
+
+                            matches!(
+                                restart_strategy,
+                                RestartStrategy::Always | RestartStrategy::OnFailure
+                            )
+                        };
+
+                        if should_restart {
+                            running_thread.lock().remove(&name);
+                            tracing::info!(
+                                "{name}: restarting terminated process in {restart_sec}s"
+                            );
+
+                            std::thread::sleep(Duration::from_secs(restart_sec));
+
+                            // Send reset and start messages
+                            for message in [
+                                SocketMessage::Reset(vec![name.to_string()]),
+                                SocketMessage::Start(vec![name.to_string()]),
+                            ] {
+                                if let Err(error) = send_message("wpmd.sock", message) {
+                                    tracing::error!("{name}: {error}");
+                                }
+                            }
+
+                            return;
+                        } else {
+                            terminated_thread.lock().insert(name.clone(), Utc::now());
+                        }
+                    }
+                }
+                Err(error) => {
+                    tracing::error!("{name}: {error}");
+                }
+            }
+
+            running_thread.lock().remove(&name);
+        });
     }
 
     pub fn log_path(&self) -> PathBuf {
