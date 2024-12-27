@@ -194,56 +194,14 @@ impl Definition {
                     terminated.clone(),
                 );
             }
+            // oneshots block the main thread
             ServiceKind::Oneshot => {
-                std::thread::spawn(move || {
-                    match thread_child.wait() {
-                        Ok(exit_status) => {
-                            if exit_status.success() {
-                                completed_thread.lock().insert(name.clone(), Utc::now());
-                                tracing::info!(
-                                    "{name}: oneshot unit terminated with successful exit code {}",
-                                    exit_status.code().unwrap()
-                                );
-
-                                for command in exec_start_post_thread.iter().flatten() {
-                                    let stringified = if let Some(args) = &command.arguments {
-                                        format!(
-                                            "{} {}",
-                                            command.executable.to_string_lossy(),
-                                            args.join(" ")
-                                        )
-                                    } else {
-                                        command.executable.to_string_lossy().to_string()
-                                    };
-
-                                    tracing::info!(
-                                        "{name}: executing post-start command - {stringified}"
-                                    );
-                                    let mut command =
-                                        command.to_silent_command(environment_thread.clone());
-                                    let _ = command.output();
-                                }
-                            } else {
-                                tracing::warn!(
-                                    "{name}: oneshot unit terminated with failure exit code {}",
-                                    exit_status.code().unwrap()
-                                );
-                            }
-                        }
-                        Err(error) => {
-                            tracing::error!("{name}: {error}");
-                        }
-                    }
-
-                    running_thread.lock().remove(&name);
-                });
-            }
-            ServiceKind::Forking => {
-                std::thread::spawn(move || match thread_child.wait() {
+                match thread_child.wait() {
                     Ok(exit_status) => {
                         if exit_status.success() {
+                            completed_thread.lock().insert(name.clone(), Utc::now());
                             tracing::info!(
-                                "{name}: forking unit terminated with successful exit code {}",
+                                "{name}: oneshot unit terminated with successful exit code {}",
                                 exit_status.code().unwrap()
                             );
 
@@ -267,7 +225,7 @@ impl Definition {
                             }
                         } else {
                             tracing::warn!(
-                                "{name}: forking unit terminated with failure exit code {}",
+                                "{name}: oneshot unit terminated with failure exit code {}",
                                 exit_status.code().unwrap()
                             );
                         }
@@ -275,8 +233,29 @@ impl Definition {
                     Err(error) => {
                         tracing::error!("{name}: {error}");
                     }
-                });
+                }
+
+                running_thread.lock().remove(&name);
             }
+            // forking also blocks the main thread
+            ServiceKind::Forking => match thread_child.wait() {
+                Ok(exit_status) => {
+                    if exit_status.success() {
+                        tracing::info!(
+                            "{name}: forking unit terminated with successful exit code {}",
+                            exit_status.code().unwrap()
+                        );
+                    } else {
+                        tracing::warn!(
+                            "{name}: forking unit terminated with failure exit code {}",
+                            exit_status.code().unwrap()
+                        );
+                    }
+                }
+                Err(error) => {
+                    tracing::error!("{name}: {error}");
+                }
+            },
         }
 
         Ok(state_child)
