@@ -43,18 +43,38 @@
         {
           "type": "object",
           "required": [
-            "LivenessSec"
+            "Process"
           ],
           "properties": {
-            "LivenessSec": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0.0
+            "Process": {
+              "$ref": "#/definitions/ProcessHealthcheck"
             }
           },
           "additionalProperties": false
         }
       ]
+    },
+    "ProcessHealthcheck": {
+      "description": "A process liveness healthcheck either based on an automatic PID or an optional binary",
+      "type": "object",
+      "required": [
+        "DelaySec"
+      ],
+      "properties": {
+        "DelaySec": {
+          "description": "The number of seconds to delay before checking for liveness",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "Target": {
+          "description": "An optional binary with which to check process liveness",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     },
     "RestartStrategy": {
       "description": "Information about a wpm definition's restart strategy",
@@ -239,7 +259,8 @@
       "type": "string",
       "enum": [
         "Simple",
-        "Oneshot"
+        "Oneshot",
+        "Forking"
       ]
     },
     "Unit": {

@@ -37,3 +37,10 @@ trace target $RUST_LOG="trace":
 
 jsonschema:
     cargo +stable run --bin wpmctl --locked -- schemagen >schema.unit.json
+
+# this part is run in a nix shell because python is a nightmare
+schemagen:
+    rm -rf schema-docs
+    mkdir -p schema-docs
+    generate-schema-doc ./schema.unit.json --config template_name=js_offline --config minify=false ./schema-docs/
+    mv ./schema-docs/schema.unit.html ./schema-docs/schema.html
