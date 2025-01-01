@@ -188,7 +188,11 @@ impl ProcessManager {
 
         for entry in read_dir.flatten() {
             let path = entry.path();
-            if path.is_file() && path.extension() == Some(OsStr::new("toml")) {
+            if path.is_file()
+                && path.extension() == Some(OsStr::new("toml"))
+                && path.file_name() != Some(OsStr::new("taplo.toml"))
+                && path.file_name() != Some(OsStr::new(".taplo.toml"))
+            {
                 units.push(path)
             }
         }
