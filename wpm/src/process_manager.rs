@@ -472,8 +472,12 @@ impl ProcessManager {
         }
 
         if let Err(error) = proc_state.child.wait() {
-            running.insert(name.to_string(), tmp_proc_state);
-            return Err(error.into());
+            if matches!(error.kind(), std::io::ErrorKind::NotFound) {
+                tracing::warn!("{name}: process {id} not found; assuming successful termination");
+            } else {
+                running.insert(name.to_string(), tmp_proc_state);
+                return Err(error.into());
+            }
         }
 
         tracing::info!("{name}: process {id} successfully terminated");
