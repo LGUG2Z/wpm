@@ -184,6 +184,7 @@ impl Definition {
         let completed_thread = completed.clone();
         let running_thread = running.clone();
         let exec_start_post_thread = self.service.exec_start_post.clone();
+        let exec_stop_thread = self.service.exec_stop.clone();
         let environment_thread = self.service.environment.clone();
 
         match self.service.kind {
@@ -219,6 +220,23 @@ impl Definition {
                                 tracing::info!(
                                     "{name}: executing post-start command - {stringified}"
                                 );
+                                let mut command =
+                                    command.to_silent_command(environment_thread.clone());
+                                let _ = command.output();
+                            }
+
+                            for command in exec_stop_thread.iter().flatten() {
+                                let stringified = if let Some(args) = &command.arguments {
+                                    format!(
+                                        "{} {}",
+                                        command.executable.to_string_lossy(),
+                                        args.join(" ")
+                                    )
+                                } else {
+                                    command.executable.to_string_lossy().to_string()
+                                };
+
+                                tracing::info!("{name}: executing cleanup command - {stringified}");
                                 let mut command =
                                     command.to_silent_command(environment_thread.clone());
                                 let _ = command.output();
