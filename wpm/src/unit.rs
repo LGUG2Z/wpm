@@ -2,6 +2,7 @@ use crate::communication::send_message;
 use crate::process_manager::Child;
 use crate::process_manager::ProcessManagerError;
 use crate::process_manager::ProcessState;
+use crate::wpm_data_dir;
 use crate::SocketMessage;
 use chrono::DateTime;
 use chrono::Utc;
@@ -517,14 +518,9 @@ impl Definition {
     }
 
     pub fn log_path(&self) -> PathBuf {
-        let home = dirs::home_dir().expect("could not find home dir");
-        let dir = home.join(".config").join("wpm").join("logs");
-
-        if !dir.is_dir() {
-            std::fs::create_dir_all(&dir).expect("could not create ~/.config/wpm/logs");
-        }
-
-        dir.join(format!("{}.log", self.unit.name))
+        wpm_data_dir()
+            .join("logs")
+            .join(format!("{}.log", self.unit.name))
     }
 }
 

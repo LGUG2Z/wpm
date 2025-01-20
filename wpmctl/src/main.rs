@@ -13,6 +13,7 @@ use std::io::BufReader;
 use std::io::Read;
 use wpm::communication::send_message;
 use wpm::unit::Definition;
+use wpm::wpm_data_dir;
 use wpm::SocketMessage;
 
 #[derive(Parser)]
@@ -158,13 +159,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Some(unit) => {
-                let home = dirs::home_dir().expect("could not find home dir");
-                let dir = home.join(".config").join("wpm").join("logs");
-
-                if !dir.is_dir() {
-                    std::fs::create_dir_all(&dir).expect("could not create ~/.config/wpm/logs");
-                }
-
+                let dir = wpm_data_dir().join("logs");
                 let file = File::open(dir.join(format!("{}.log", unit))).unwrap();
 
                 let file = TailedFile::new(file);
