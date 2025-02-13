@@ -9,6 +9,7 @@ use parking_lot::Mutex;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::process::exit;
+use std::sync::mpsc;
 use std::sync::Arc;
 use sysinfo::Process;
 use sysinfo::ProcessesToUpdate;
@@ -81,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if len > 1 {
                 tracing::error!("wpmd.exe is already running, please exit the existing process before starting a new one");
-                std::process::exit(1);
+                exit(1);
             }
         }
     }
@@ -95,7 +96,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let name = SOCKET_NAME.to_ns_name::<GenericNamespaced>()?;
     let opts = ListenerOptions::new().name(name.clone());
 
-    let mut listener = match opts.create_sync() {
+    let (tx, rx) = mpsc::channel::<SocketMessage>();
+
+    let listener = match opts.create_sync() {
         Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
             tracing::error!("failed to create listener: {error}");
             return Err(error.into());
@@ -110,36 +113,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(connection) => connection,
             Err(error) => {
                 tracing::error!("failed to accept incoming socket connection: {error}");
-
-                // gross, we should not have to do this
-                // possibly a bug in interprocess?
-                drop(listener);
-                let opts = ListenerOptions::new().name(name.clone());
-                listener = match opts.create_sync() {
-                    Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
-                        tracing::error!("failed to recreate listener: {error}");
-                        break;
-                    }
-                    Ok(x) => x,
-                    _ => {
-                        tracing::error!("failed to recreate listener, catastrophic failure");
-                        exit(1);
-                    }
-                };
-
                 continue;
             }
         };
 
-        let pm = loop_arc.clone();
-
-        if let Err(error) = handle_connection(pm, conn) {
-            tracing::error!("{error}");
-            continue;
+        if let Ok(socket_message) = extract_socket_message(conn) {
+            match tx.send(socket_message) {
+                Ok(_) => {
+                    tracing::info!("successfully queued socket message");
+                }
+                Err(_) => {
+                    tracing::warn!("failed to queue socket message");
+                }
+            }
         }
     });
 
-    let (ctrlc_sender, ctrlc_receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        while let Ok(message) = rx.recv() {
+            let pm = loop_arc.clone();
+            if let Err(error) = handle_socket_message(pm, message) {
+                tracing::error!("{error}")
+            }
+        }
+    });
+
+    let (ctrlc_sender, ctrlc_receiver) = mpsc::channel();
     ctrlc::set_handler(move || {
         ctrlc_sender
             .send(())
@@ -155,52 +154,60 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn handle_connection(pm: Arc<Mutex<ProcessManager>>, conn: Stream) -> Result<(), WpmdError> {
+fn extract_socket_message(conn: Stream) -> Result<SocketMessage, WpmdError> {
     let mut conn = BufReader::new(&conn);
     let mut buf = String::new();
     conn.read_line(&mut buf)?;
+
     match serde_json::from_str::<SocketMessage>(&buf) {
         Err(error) => {
             tracing::error!("failed to deserialize socket message: {error}");
+            Err(WpmdError::SerdeJson(error))
         }
         Ok(socket_message) => {
             tracing::info!("received socket message: {socket_message:?}");
+            Ok(socket_message)
+        }
+    }
+}
 
-            let mut pm = pm.lock();
+fn handle_socket_message(
+    pm: Arc<Mutex<ProcessManager>>,
+    socket_message: SocketMessage,
+) -> Result<(), WpmdError> {
+    let mut pm = pm.lock();
 
-            match socket_message {
-                SocketMessage::Start(arg) => {
-                    for name in arg {
-                        pm.start(&name)?;
-                    }
-                }
-                SocketMessage::Stop(arg) => {
-                    for name in arg {
-                        pm.stop(&name)?;
-                    }
-                }
-                SocketMessage::Restart(arg) => {
-                    for name in arg {
-                        pm.stop(&name)?;
-                        pm.start(&name)?;
-                    }
-                }
-                SocketMessage::Status(arg) => {
-                    let status_message = pm.state().unit_status(&arg)?;
-                    send_str("wpmctl.sock", &status_message)?;
-                }
-                SocketMessage::State => {
-                    let table = format!("{}\n", pm.state().as_table());
-                    send_str("wpmctl.sock", &table)?;
-                }
-                SocketMessage::Reload => {
-                    pm.load_units()?;
-                }
-                SocketMessage::Reset(arg) => {
-                    for name in arg {
-                        pm.reset(&name);
-                    }
-                }
+    match socket_message {
+        SocketMessage::Start(arg) => {
+            for name in arg {
+                pm.start(&name)?;
+            }
+        }
+        SocketMessage::Stop(arg) => {
+            for name in arg {
+                pm.stop(&name)?;
+            }
+        }
+        SocketMessage::Restart(arg) => {
+            for name in arg {
+                pm.stop(&name)?;
+                pm.start(&name)?;
+            }
+        }
+        SocketMessage::Status(arg) => {
+            let status_message = pm.state().unit_status(&arg)?;
+            send_str("wpmctl.sock", &status_message)?;
+        }
+        SocketMessage::State => {
+            let table = format!("{}\n", pm.state().as_table());
+            send_str("wpmctl.sock", &table)?;
+        }
+        SocketMessage::Reload => {
+            pm.load_units()?;
+        }
+        SocketMessage::Reset(arg) => {
+            for name in arg {
+                pm.reset(&name);
             }
         }
     }
