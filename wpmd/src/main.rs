@@ -8,6 +8,7 @@ use interprocess::local_socket::ToNsName;
 use parking_lot::Mutex;
 use std::io::BufRead;
 use std::io::BufReader;
+use std::process::exit;
 use std::sync::Arc;
 use sysinfo::Process;
 use sysinfo::ProcessesToUpdate;
@@ -92,11 +93,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ctrlc_arc = process_manager_arc.clone();
 
     let name = SOCKET_NAME.to_ns_name::<GenericNamespaced>()?;
-    let opts = ListenerOptions::new().name(name);
+    let opts = ListenerOptions::new().name(name.clone());
 
-    let listener = match opts.create_sync() {
+    let mut listener = match opts.create_sync() {
         Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
-            tracing::error!("{error}");
+            tracing::error!("failed to create listener: {error}");
             return Err(error.into());
         }
         x => x?,
@@ -108,7 +109,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let conn = match listener.accept() {
             Ok(connection) => connection,
             Err(error) => {
-                tracing::error!("{error}");
+                tracing::error!("failed to accept incoming socket connection: {error}");
+
+                // gross, we should not have to do this
+                // possibly a bug in interprocess?
+                drop(listener);
+                let opts = ListenerOptions::new().name(name.clone());
+                listener = match opts.create_sync() {
+                    Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
+                        tracing::error!("failed to recreate listener: {error}");
+                        break;
+                    }
+                    Ok(x) => x,
+                    _ => {
+                        tracing::error!("failed to recreate listener, catastrophic failure");
+                        exit(1);
+                    }
+                };
+
                 continue;
             }
         };
@@ -117,6 +135,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if let Err(error) = handle_connection(pm, conn) {
             tracing::error!("{error}");
+            continue;
         }
     });
 
@@ -142,7 +161,7 @@ fn handle_connection(pm: Arc<Mutex<ProcessManager>>, conn: Stream) -> Result<(),
     conn.read_line(&mut buf)?;
     match serde_json::from_str::<SocketMessage>(&buf) {
         Err(error) => {
-            tracing::error!("{error}");
+            tracing::error!("failed to deserialize socket message: {error}");
         }
         Ok(socket_message) => {
             tracing::info!("received socket message: {socket_message:?}");
