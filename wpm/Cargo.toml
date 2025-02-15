@@ -16,5 +16,5 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 schemars = "0.8"
-tabled = { version = "0.17", features = ["derive"] }
+tabled = { version = "0.18", features = ["derive"] }
 toml = "0.8"
