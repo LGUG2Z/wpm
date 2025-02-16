@@ -232,6 +232,15 @@ impl ProcessManager {
                 .unwrap()
                 .to_string();
 
+            if let Some(working_directory) = definition.service.working_directory.as_mut() {
+                let stringified = working_directory.to_string_lossy();
+                let stringified = stringified.replace("$USERPROFILE", &home_dir);
+                let directory = PathBuf::from(stringified);
+
+                *working_directory = directory;
+            }
+
+
             for (_, value) in definition.service.environment.iter_mut().flatten() {
                 *value = value.replace("$USERPROFILE", &home_dir);
             }
