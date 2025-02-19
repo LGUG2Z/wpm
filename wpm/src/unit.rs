@@ -308,6 +308,8 @@ impl Definition {
 
         match &self.service.healthcheck {
             Some(Healthcheck::Command(healthcheck)) => {
+                let seconds = healthcheck.delay_sec;
+
                 let stringified = if let Some(args) = &healthcheck.arguments {
                     format!(
                         "{} {}",
@@ -318,15 +320,17 @@ impl Definition {
                     healthcheck.executable.to_string_lossy().to_string()
                 };
 
-                tracing::info!("{name}: running command healthcheck - {stringified}");
+                tracing::info!("{name}: running command healthcheck - {stringified} ({seconds}s)");
+                std::thread::sleep(Duration::from_secs(healthcheck.delay_sec));
+
                 let mut command = healthcheck.to_silent_command(self.service.environment.clone());
 
                 let mut status = command.spawn()?.wait()?;
-                let mut max_attempts = 5;
+                let mut max_attempts = healthcheck.retry_limit.unwrap_or(5);
 
                 while !status.success() && max_attempts > 0 {
-                    tracing::warn!("{name}: failed healthcheck command, retrying in 2s");
-                    std::thread::sleep(Duration::from_secs(2));
+                    tracing::warn!("{name}: failed healthcheck command, retrying in {seconds}s");
+                    std::thread::sleep(Duration::from_secs(seconds));
                     status = command.spawn()?.wait()?;
                     max_attempts -= 1;
                 }
@@ -526,8 +530,67 @@ impl Definition {
 
 #[derive(Serialize, Deserialize, Clone, JsonSchema)]
 pub enum Healthcheck {
-    Command(ServiceCommand),
+    Command(CommandHealthcheck),
     Process(ProcessHealthcheck),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+/// A service liveness healthcheck based on the successful exit code of a command
+#[serde(rename_all = "PascalCase")]
+pub struct CommandHealthcheck {
+    /// Executable name or absolute path to an executable
+    pub executable: PathBuf,
+    /// Arguments passed to the executable
+    pub arguments: Option<Vec<String>>,
+    /// Environment variables for this command
+    pub environment: Option<Vec<(String, String)>>,
+    /// The number of seconds to delay before checking for liveness
+    pub delay_sec: u64,
+    /// The maximum number of retries (default: 5)
+    pub retry_limit: Option<u8>,
+}
+
+impl CommandHealthcheck {
+    pub fn resolve_user_profile(&mut self) {
+        let home_dir = dirs::home_dir()
+            .expect("could not find home dir")
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        let stringified = self.executable.to_string_lossy();
+        let stringified = stringified.replace("$USERPROFILE", &home_dir);
+        let executable = PathBuf::from(stringified);
+        self.executable = executable;
+
+        for arg in self.arguments.iter_mut().flatten() {
+            *arg = arg.replace("$USERPROFILE", &home_dir);
+        }
+
+        for (_, value) in self.environment.iter_mut().flatten() {
+            *value = value.replace("$USERPROFILE", &home_dir);
+        }
+    }
+
+    pub fn to_silent_command(&self, global_environment: Option<Vec<(String, String)>>) -> Command {
+        let mut command = Command::new(&self.executable);
+        if let Some(arguments) = &self.arguments {
+            command.args(arguments);
+        }
+
+        if let Some(environment) = global_environment {
+            command.envs(environment);
+        }
+
+        if let Some(environment) = &self.environment {
+            command.envs(environment.clone());
+        }
+
+        command.stdout(std::process::Stdio::null());
+        command.stderr(std::process::Stdio::null());
+
+        command
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, JsonSchema)]

@@ -26,6 +26,65 @@
     }
   },
   "definitions": {
+    "CommandHealthcheck": {
+      "description": "A service liveness healthcheck based on the successful exit code of a command",
+      "type": "object",
+      "required": [
+        "DelaySec",
+        "Executable"
+      ],
+      "properties": {
+        "Arguments": {
+          "description": "Arguments passed to the executable",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "DelaySec": {
+          "description": "The number of seconds to delay before checking for liveness",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "Environment": {
+          "description": "Environment variables for this command",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "Executable": {
+          "description": "Executable name or absolute path to an executable",
+          "type": "string"
+        },
+        "RetryLimit": {
+          "description": "The maximum number of retries (default: 5)",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "minimum": 0.0
+        }
+      }
+    },
     "Healthcheck": {
       "oneOf": [
         {
@@ -35,7 +94,7 @@
           ],
           "properties": {
             "Command": {
-              "$ref": "#/definitions/ServiceCommand"
+              "$ref": "#/definitions/CommandHealthcheck"
             }
           },
           "additionalProperties": false

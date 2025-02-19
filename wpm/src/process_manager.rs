@@ -240,7 +240,6 @@ impl ProcessManager {
                 *working_directory = directory;
             }
 
-
             for (_, value) in definition.service.environment.iter_mut().flatten() {
                 *value = value.replace("$USERPROFILE", &home_dir);
             }

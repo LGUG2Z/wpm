@@ -32,3 +32,4 @@ Arguments = ["restore-windows"]
 [Service.Healthcheck.Command]
 Executable = "komorebic.exe"
 Arguments = ["state"]
+DelaySec = 1

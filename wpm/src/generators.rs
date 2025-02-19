@@ -3,6 +3,7 @@ use crate::unit::Healthcheck;
 use crate::unit::RestartStrategy;
 use crate::unit::Service;
 use crate::unit::ServiceCommand;
+use crate::unit::CommandHealthcheck;
 use crate::unit::ServiceKind;
 use crate::unit::Unit;
 use schemars::schema_for;
@@ -124,10 +125,12 @@ impl Definition {
                     },
                     environment: None,
                     working_directory: None,
-                    healthcheck: Some(Healthcheck::Command(ServiceCommand {
+                    healthcheck: Some(Healthcheck::Command(CommandHealthcheck {
                         executable: PathBuf::from("komorebic.exe"),
                         arguments: Some(vec!["state".to_string()]),
                         environment: None,
+                        delay_sec: 1,
+                        retry_limit: None,
                     })),
                     restart: Default::default(),
                     restart_sec: None,
