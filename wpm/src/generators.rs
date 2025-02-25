@@ -1,9 +1,9 @@
+use crate::unit::CommandHealthcheck;
 use crate::unit::Definition;
 use crate::unit::Healthcheck;
 use crate::unit::RestartStrategy;
 use crate::unit::Service;
 use crate::unit::ServiceCommand;
-use crate::unit::CommandHealthcheck;
 use crate::unit::ServiceKind;
 use crate::unit::Unit;
 use schemars::schema_for;
