@@ -8,7 +8,6 @@ wpm = { path = "../wpm" }
 
 chrono = { workspace = true }
 clap = { workspace = true }
-dirs = { workspace = true }
 interprocess = { workspace = true }
 
 fs-tail = "0.1"
