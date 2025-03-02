@@ -136,12 +136,18 @@ impl ServiceCommand {
             command.args(arguments);
         }
 
+        let mut environment_variables = vec![];
+
         if let Some(environment) = global_environment {
-            command.envs(environment);
+            environment_variables.extend(environment.clone());
         }
 
         if let Some(environment) = &self.environment {
-            command.envs(environment.clone());
+            environment_variables.extend(environment.clone());
+        }
+
+        if !environment_variables.is_empty() {
+            command.envs(environment_variables);
         }
 
         command.stdout(std::process::Stdio::null());
@@ -578,12 +584,18 @@ impl CommandHealthcheck {
             command.args(arguments);
         }
 
+        let mut environment_variables = vec![];
+
         if let Some(environment) = global_environment {
-            command.envs(environment);
+            environment_variables.extend(environment.clone());
         }
 
         if let Some(environment) = &self.environment {
-            command.envs(environment.clone());
+            environment_variables.extend(environment.clone());
+        }
+
+        if !environment_variables.is_empty() {
+            command.envs(environment_variables);
         }
 
         command.stdout(std::process::Stdio::null());
@@ -641,8 +653,18 @@ impl From<&Definition> for Command {
 
         let mut command = Command::new(&value.service.exec_start.executable);
 
+        let mut environment_variables = vec![];
+
         if let Some(environment) = &value.service.environment {
-            command.envs(environment.clone());
+            environment_variables.extend(environment.clone());
+        }
+
+        if let Some(environment) = &value.service.exec_start.environment {
+            environment_variables.extend(environment.clone());
+        }
+
+        if !environment_variables.is_empty() {
+            command.envs(environment_variables);
         }
 
         if let Some(arguments) = &value.service.exec_start.arguments {

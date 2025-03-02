@@ -160,7 +160,20 @@ impl ProcessManagerStatus {
                         .map(|(a, b)| format!("{a}={b}"))
                         .collect::<Vec<_>>();
 
-                    output.push("  Environment:".to_string());
+                    output.push("  Environment (Service):".to_string());
+                    for var in vars {
+                        let var = var.replace("/", "\\");
+                        output.push(format!("    {var}"));
+                    }
+                }
+
+                if let Some(environment) = &definition.service.exec_start.environment {
+                    let vars = environment
+                        .iter()
+                        .map(|(a, b)| format!("{a}={b}"))
+                        .collect::<Vec<_>>();
+
+                    output.push("  Environment (ExecStart):".to_string());
                     for var in vars {
                         let var = var.replace("/", "\\");
                         output.push(format!("    {var}"));
