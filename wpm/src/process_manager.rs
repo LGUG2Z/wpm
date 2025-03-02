@@ -1,6 +1,7 @@
 use crate::communication::send_message;
 use crate::process_manager_status::ProcessManagerStatus;
 use crate::unit::Definition;
+use crate::unit::Executable;
 use crate::unit::Healthcheck;
 use crate::unit::RestartStrategy;
 use crate::unit::ServiceKind;
@@ -42,12 +43,18 @@ pub enum ProcessManagerError {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Toml(#[from] toml::de::Error),
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Reqwest(#[from] reqwest::Error),
     #[error("{0} did not spawn a process with a handle")]
     NoHandle(String),
     #[error("a forking service must have a process healthcheck target defined")]
     InvalidForkingService,
     #[error("a simple service cannot have a separate process healthcheck target")]
     InvalidSimpleService,
+    #[error("hash mismatch (expected {expected}, actual {actual})")]
+    HashMismatch { expected: String, actual: String },
 }
 
 #[derive(Clone)]
@@ -181,6 +188,44 @@ impl ProcessManager {
         Ok(())
     }
 
+    pub fn retrieve_units() -> Result<Vec<Definition>, ProcessManagerError> {
+        let read_dir = std::fs::read_dir(Self::unit_directory())?;
+
+        let mut paths = vec![];
+
+        for entry in read_dir.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                #[allow(clippy::if_same_then_else)]
+                if path.extension() == Some(OsStr::new("json")) {
+                    paths.push(path);
+                } else if path.extension() == Some(OsStr::new("toml"))
+                    && path.file_name() != Some(OsStr::new("taplo.toml"))
+                    && path.file_name() != Some(OsStr::new(".taplo.toml"))
+                {
+                    paths.push(path);
+                }
+            }
+        }
+
+        let mut units = vec![];
+
+        for path in paths {
+            let definition: Definition = match path.extension() {
+                Some(extension) => match extension.to_string_lossy().to_string().as_str() {
+                    "json" => serde_json::from_str(&std::fs::read_to_string(path)?)?,
+                    "toml" => toml::from_str(&std::fs::read_to_string(path)?)?,
+                    _ => continue,
+                },
+                None => continue,
+            };
+
+            units.push(definition);
+        }
+
+        Ok(units)
+    }
+
     pub fn load_units(&mut self) -> Result<(), ProcessManagerError> {
         let read_dir = std::fs::read_dir(Self::unit_directory())?;
 
@@ -188,17 +233,28 @@ impl ProcessManager {
 
         for entry in read_dir.flatten() {
             let path = entry.path();
-            if path.is_file()
-                && path.extension() == Some(OsStr::new("toml"))
-                && path.file_name() != Some(OsStr::new("taplo.toml"))
-                && path.file_name() != Some(OsStr::new(".taplo.toml"))
-            {
-                units.push(path)
+            if path.is_file() {
+                #[allow(clippy::if_same_then_else)]
+                if path.extension() == Some(OsStr::new("json")) {
+                    units.push(path);
+                } else if path.extension() == Some(OsStr::new("toml"))
+                    && path.file_name() != Some(OsStr::new("taplo.toml"))
+                    && path.file_name() != Some(OsStr::new(".taplo.toml"))
+                {
+                    units.push(path);
+                }
             }
         }
 
         for path in units {
-            let mut definition: Definition = toml::from_str(&std::fs::read_to_string(path)?)?;
+            let mut definition: Definition = match path.extension() {
+                Some(extension) => match extension.to_string_lossy().to_string().as_str() {
+                    "json" => serde_json::from_str(&std::fs::read_to_string(path)?)?,
+                    "toml" => toml::from_str(&std::fs::read_to_string(path)?)?,
+                    _ => continue,
+                },
+                None => continue,
+            };
 
             if matches!(definition.service.kind, ServiceKind::Forking) {
                 let mut is_valid_forking_service = false;
@@ -266,11 +322,14 @@ impl ProcessManager {
                 .service
                 .exec_start
                 .executable
+                .pathbuf()?
                 .canonicalize()
                 .is_err()
             {
-                match Self::find_exe(&definition.service.exec_start.executable) {
-                    Some(path) => definition.service.exec_start.executable = path,
+                match Self::find_exe(&definition.service.exec_start.executable.pathbuf()?) {
+                    Some(path) => {
+                        definition.service.exec_start.executable = Executable::Local(path)
+                    }
                     None => {
                         tracing::warn!(
                             "{}: could not find executable in $PATH, skipping unit",
@@ -282,9 +341,9 @@ impl ProcessManager {
             }
 
             for command in definition.service.exec_start_pre.iter_mut().flatten() {
-                if command.executable.canonicalize().is_err() {
-                    match Self::find_exe(&command.executable) {
-                        Some(path) => command.executable = path,
+                if command.executable.pathbuf()?.canonicalize().is_err() {
+                    match Self::find_exe(&command.executable.pathbuf()?) {
+                        Some(path) => command.executable = Executable::Local(path),
                         None => {
                             tracing::warn!(
                             "{}: could not find pre-start command executable in $PATH, skipping unit",
@@ -297,9 +356,9 @@ impl ProcessManager {
             }
 
             for command in definition.service.exec_start_post.iter_mut().flatten() {
-                if command.executable.canonicalize().is_err() {
-                    match Self::find_exe(&command.executable) {
-                        Some(path) => command.executable = path,
+                if command.executable.pathbuf()?.canonicalize().is_err() {
+                    match Self::find_exe(&command.executable.pathbuf()?) {
+                        Some(path) => command.executable = Executable::Local(path),
                         None => {
                             tracing::warn!(
                             "{}: could not find post-start command executable in $PATH, skipping unit",
@@ -312,9 +371,9 @@ impl ProcessManager {
             }
 
             for command in definition.service.exec_stop.iter_mut().flatten() {
-                if command.executable.canonicalize().is_err() {
-                    match Self::find_exe(&command.executable) {
-                        Some(path) => command.executable = path,
+                if command.executable.pathbuf()?.canonicalize().is_err() {
+                    match Self::find_exe(&command.executable.pathbuf()?) {
+                        Some(path) => command.executable = Executable::Local(path),
                         None => {
                             tracing::warn!(
                             "{}: could not find shutdown command executable in $PATH, skipping unit",
@@ -327,9 +386,9 @@ impl ProcessManager {
             }
 
             for command in definition.service.exec_stop_post.iter_mut().flatten() {
-                if command.executable.canonicalize().is_err() {
-                    match Self::find_exe(&command.executable) {
-                        Some(path) => command.executable = path,
+                if command.executable.pathbuf()?.canonicalize().is_err() {
+                    match Self::find_exe(&command.executable.pathbuf()?) {
+                        Some(path) => command.executable = Executable::Local(path),
                         None => {
                             tracing::warn!(
                             "{}: could not find cleanup command executable in $PATH, skipping unit",
@@ -451,13 +510,9 @@ impl ProcessManager {
         if let Some(shutdown_commands) = unit.service.exec_stop {
             for command in shutdown_commands {
                 let stringified = if let Some(args) = &command.arguments {
-                    format!(
-                        "{} {}",
-                        command.executable.to_string_lossy(),
-                        args.join(" ")
-                    )
+                    format!("{} {}", command.executable, args.join(" "))
                 } else {
-                    command.executable.to_string_lossy().to_string()
+                    command.executable.to_string()
                 };
 
                 tracing::info!("{name}: executing shutdown command - {stringified}");
@@ -493,13 +548,9 @@ impl ProcessManager {
         if let Some(cleanup_commands) = unit.service.exec_stop_post {
             for command in cleanup_commands {
                 let stringified = if let Some(args) = &command.arguments {
-                    format!(
-                        "{} {}",
-                        command.executable.to_string_lossy(),
-                        args.join(" ")
-                    )
+                    format!("{} {}", command.executable, args.join(" "))
                 } else {
-                    command.executable.to_string_lossy().to_string()
+                    command.executable.to_string()
                 };
 
                 tracing::info!("{name}: executing cleanup command - {stringified}");

@@ -1,6 +1,6 @@
 [Unit]
 Name = "komorebi-bar"
-Description = "status bar for komorebi"
+Description = "Status bar for komorebi"
 Requires = ["komorebi"]
 
 [Service]

@@ -8,6 +8,13 @@
     "Unit"
   ],
   "properties": {
+    "Schema": {
+      "description": "JSON Schema definition for auto completions",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "Service": {
       "description": "Information about what this definition executes",
       "allOf": [
@@ -85,6 +92,30 @@
         }
       }
     },
+    "Executable": {
+      "anyOf": [
+        {
+          "description": "A remote executable file verified using a SHA256 hash",
+          "allOf": [
+            {
+              "$ref": "#/definitions/RemoteExecutable"
+            }
+          ]
+        },
+        {
+          "description": "A local executable file",
+          "type": "string"
+        },
+        {
+          "description": "An executable file with a Scoop package dependency",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ScoopExecutable"
+            }
+          ]
+        }
+      ]
+    },
     "Healthcheck": {
       "oneOf": [
         {
@@ -135,6 +166,30 @@
         }
       }
     },
+    "RemoteExecutable": {
+      "type": "object",
+      "required": [
+        "Hash",
+        "Url"
+      ],
+      "properties": {
+        "Hash": {
+          "description": "Sha256 hash of the remote executable at",
+          "type": "string"
+        },
+        "Url": {
+          "description": "Url to a remote executable",
+          "allOf": [
+            {
+              "$ref": "#/definitions/RemoteUrl"
+            }
+          ]
+        }
+      }
+    },
+    "RemoteUrl": {
+      "type": "string"
+    },
     "RestartStrategy": {
       "description": "Information about a wpm definition's restart strategy",
       "type": "string",
@@ -143,6 +198,94 @@
         "Always",
         "OnFailure"
       ]
+    },
+    "ScoopBucket": {
+      "type": "string",
+      "enum": [
+        "Main",
+        "Extras"
+      ]
+    },
+    "ScoopExecutable": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ScoopPackage"
+        },
+        {
+          "description": "A Scoop package identified using a raw manifest",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ScoopManifest"
+            }
+          ]
+        }
+      ]
+    },
+    "ScoopManifest": {
+      "type": "object",
+      "required": [
+        "Manifest",
+        "Package",
+        "Version"
+      ],
+      "properties": {
+        "Manifest": {
+          "description": "Url to a Scoop manifest",
+          "allOf": [
+            {
+              "$ref": "#/definitions/RemoteUrl"
+            }
+          ]
+        },
+        "Package": {
+          "description": "Name of the package",
+          "type": "string"
+        },
+        "Target": {
+          "description": "Target executable in the package",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "Version": {
+          "description": "Version of the package",
+          "type": "string"
+        }
+      }
+    },
+    "ScoopPackage": {
+      "type": "object",
+      "required": [
+        "Bucket",
+        "Package",
+        "Version"
+      ],
+      "properties": {
+        "Bucket": {
+          "description": "Bucket that the package is found in",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ScoopBucket"
+            }
+          ]
+        },
+        "Package": {
+          "description": "Name of the package",
+          "type": "string"
+        },
+        "Target": {
+          "description": "Target executable in the package",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "Version": {
+          "description": "Version of the package",
+          "type": "string"
+        }
+      }
     },
     "Service": {
       "description": "Information about what a wpm definition executes",
@@ -225,7 +368,6 @@
         },
         "Healthcheck": {
           "description": "Healthcheck for this service definition",
-          "default": null,
           "anyOf": [
             {
               "$ref": "#/definitions/Healthcheck"
@@ -309,8 +451,12 @@
           }
         },
         "Executable": {
-          "description": "Executable name or absolute path to an executable",
-          "type": "string"
+          "description": "Executable (local file, remote file, or Scoop package)",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Executable"
+            }
+          ]
         }
       }
     },

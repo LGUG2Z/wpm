@@ -1,6 +1,6 @@
 [Unit]
 Name = "masir"
-Description = "focus follows mouse for Windows"
+Description = "Focus follows mouse for Windows"
 Requires = ["komorebi"]
 
 [Service]

@@ -1,0 +1,23 @@
+[Unit]
+Name = "kanata"
+Description = "Software keyboard remapper"
+
+[Service]
+Kind = "Simple"
+Restart = "Never"
+
+[Service.ExecStart]
+Arguments = [
+    "-c",
+    "$USERPROFILE/minimal.kbd",
+    "--port",
+    "9999",
+]
+
+[Service.ExecStart.Executable]
+Package = "kanata"
+Version = "1.8.0"
+Manifest = "https://raw.githubusercontent.com/ScoopInstaller/Extras/653cfbfc224e40343a49510b2f47dd30c5ca7790/bucket/kanata.json"
+
+[Service.Healthcheck.Process]
+DelaySec = 1

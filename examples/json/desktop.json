@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LGUG2Z/wpm/refs/heads/master/schema.unit.json",
+  "Unit": {
+    "Name": "desktop",
+    "Description": "Everything I need to work on Windows",
+    "Requires": [
+      "komorebi",
+      "komorebi-bar",
+      "mousemaster"
+    ]
+  },
+  "Service": {
+    "Kind": "Oneshot",
+    "Autostart": true,
+    "ExecStart": {
+      "Executable": "msg.exe",
+      "Arguments": [
+        "*",
+        "Desktop recipe completed!"
+      ]
+    },
+    "Restart": "Never"
+  }
+}

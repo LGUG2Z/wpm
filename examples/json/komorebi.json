@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LGUG2Z/wpm/refs/heads/master/schema.unit.json",
+  "Unit": {
+    "Name": "komorebi",
+    "Description": "Tiling window management for Windows",
+    "Requires": [
+      "whkd",
+      "kanata"
+    ]
+  },
+  "Service": {
+    "Kind": "Simple",
+    "ExecStart": {
+      "Executable": "komorebi.exe",
+      "Arguments": [
+        "--config",
+        "$USERPROFILE/.config/komorebi/komorebi.json"
+      ],
+      "Environment": [
+        [
+          "KOMOREBI_CONFIG_HOME",
+          "$USERPROFILE/.config/komorebi"
+        ]
+      ]
+    },
+    "ExecStop": [
+      {
+        "Executable": "komorebic.exe",
+        "Arguments": [
+          "stop"
+        ]
+      }
+    ],
+    "ExecStopPost": [
+      {
+        "Executable": "komorebic.exe",
+        "Arguments": [
+          "restore-windows"
+        ]
+      }
+    ],
+    "Healthcheck": {
+      "Command": {
+        "Executable": "komorebic.exe",
+        "Arguments": [
+          "state"
+        ],
+        "DelaySec": 1
+      }
+    },
+    "Restart": "Never"
+  }
+}

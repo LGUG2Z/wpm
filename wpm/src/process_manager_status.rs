@@ -72,7 +72,7 @@ impl ProcessManagerStatus {
                             .service
                             .exec_start
                             .executable
-                            .to_string_lossy()
+                            .to_string()
                             .replace("/", "\\")
                     ));
                 } else {
@@ -82,7 +82,7 @@ impl ProcessManagerStatus {
                             .service
                             .exec_start
                             .executable
-                            .to_string_lossy()
+                            .to_string()
                             .replace("/", "\\")
                     ));
                 }
@@ -128,12 +128,9 @@ impl ProcessManagerStatus {
                         if let Some(args) = &command.arguments {
                             let arguments = args.join(" ");
                             let arguments = arguments.replace("/", "\\");
-                            output.push(format!(
-                                "    {} {arguments}",
-                                command.executable.to_string_lossy()
-                            ));
+                            output.push(format!("    {} {arguments}", command.executable));
                         } else {
-                            output.push(format!("    {}", command.executable.to_string_lossy()));
+                            output.push(format!("    {}", command.executable));
                         }
                     }
                 }
@@ -144,12 +141,9 @@ impl ProcessManagerStatus {
                         if let Some(args) = &command.arguments {
                             let arguments = args.join(" ");
                             let arguments = arguments.replace("/", "\\");
-                            output.push(format!(
-                                "    {} {arguments}",
-                                command.executable.to_string_lossy()
-                            ));
+                            output.push(format!("    {} {arguments}", command.executable,));
                         } else {
-                            output.push(format!("    {}", command.executable.to_string_lossy()));
+                            output.push(format!("    {}", command.executable));
                         }
                     }
                 }
