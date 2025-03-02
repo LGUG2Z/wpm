@@ -12,7 +12,10 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
 use wpm::communication::send_message;
+use wpm::process_manager::ProcessManager;
 use wpm::unit::Definition;
+use wpm::unit::Executable;
+use wpm::unit::ScoopExecutable;
 use wpm::wpm_data_dir;
 use wpm::SocketMessage;
 
@@ -84,6 +87,8 @@ enum SubCommand {
     Reload,
     /// Tail the logs of a unit or of the process manager
     Log(Log),
+    /// Ensure all remote dependencies are downloaded and built
+    Rebuild,
 }
 
 fn listen_for_response() -> Result<String, Box<dyn std::error::Error>> {
@@ -170,6 +175,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         },
+        SubCommand::Rebuild => {
+            let units = ProcessManager::retrieve_units()?;
+            for unit in units {
+                let name = unit.unit.name;
+                let executable = unit.service.exec_start.executable;
+                let url = match &executable {
+                    Executable::Remote(remote) => remote.url.to_string(),
+                    Executable::Scoop(scoop) => match scoop {
+                        ScoopExecutable::Package(_) => continue,
+                        ScoopExecutable::Manifest(manifest) => manifest.manifest.to_string(),
+                    },
+                    _ => continue,
+                };
+
+                let path = executable.cached_executable_path()?;
+                if !path.is_file() {
+                    println!("[{name}]: Downloading from {url}");
+                    executable.download_remote_executable()?;
+                } else {
+                    println!("[{name}]: Already exists at {}", path.display());
+                }
+            }
+        }
     }
 
     Ok(())

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LGUG2Z/wpm/refs/heads/master/schema.unit.json",
+  "Unit": {
+    "Name": "whkd",
+    "Description": "Simple hotkey daemon for Windows"
+  },
+  "Service": {
+    "Kind": "Simple",
+    "ExecStart": {
+      "Executable": "whkd.exe"
+    },
+    "Healthcheck": {
+      "Process": {
+        "DelaySec": 1
+      }
+    },
+    "Restart": "OnFailure",
+    "RestartSec": 2
+  }
+}

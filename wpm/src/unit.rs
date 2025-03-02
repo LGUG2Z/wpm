@@ -2,11 +2,18 @@ use crate::communication::send_message;
 use crate::process_manager::Child;
 use crate::process_manager::ProcessManagerError;
 use crate::process_manager::ProcessState;
-use crate::wpm_data_dir;
+use crate::reqwest_client;
+use crate::wpm_log_dir;
+use crate::wpm_store_dir;
 use crate::SocketMessage;
 use chrono::DateTime;
 use chrono::Utc;
+use dirs::home_dir;
 use parking_lot::Mutex;
+use schemars::gen::SchemaGenerator;
+use schemars::schema::InstanceType;
+use schemars::schema::Schema;
+use schemars::schema::SchemaObject;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -15,6 +22,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fs::File;
+use std::ops::Deref;
 use std::ops::Not;
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
@@ -25,11 +33,15 @@ use sysinfo::Pid;
 use sysinfo::ProcessRefreshKind;
 use sysinfo::ProcessesToUpdate;
 use sysinfo::System;
+use url::Url;
 
 #[derive(Serialize, Deserialize, Clone, JsonSchema)]
 /// A wpm definition
 #[serde(rename_all = "PascalCase")]
 pub struct Definition {
+    /// JSON Schema definition for auto completions
+    #[serde(rename(serialize = "$schema"))]
+    pub schema: Option<String>,
     /// Information about this definition and its dependencies
     pub unit: Unit,
     /// Information about what this definition executes
@@ -72,21 +84,28 @@ pub struct Service {
     #[serde(skip_serializing_if = "<&bool>::not")]
     pub autostart: bool,
     /// Commands executed before ExecStart in this service definition
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub exec_start_pre: Option<Vec<ServiceCommand>>,
     /// Command executed by this service definition
     pub exec_start: ServiceCommand,
     /// Commands executed after ExecStart in this service definition
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub exec_start_post: Option<Vec<ServiceCommand>>,
     /// Shutdown commands for this service definition
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub exec_stop: Option<Vec<ServiceCommand>>,
     /// Post-shutdown cleanup commands for this service definition
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub exec_stop_post: Option<Vec<ServiceCommand>>,
     /// Environment variables inherited by all commands in this service definition
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub environment: Option<Vec<(String, String)>>,
     /// Working directory for this service definition
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub working_directory: Option<PathBuf>,
     #[serde(default)]
     /// Healthcheck for this service definition
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub healthcheck: Option<Healthcheck>,
     #[serde(default)]
     /// Restart strategy for this service definition
@@ -100,12 +119,259 @@ pub struct Service {
 /// A wpm definition command
 #[serde(rename_all = "PascalCase")]
 pub struct ServiceCommand {
-    /// Executable name or absolute path to an executable
-    pub executable: PathBuf,
+    /// Executable (local file, remote file, or Scoop package)
+    pub executable: Executable,
     /// Arguments passed to the executable
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub arguments: Option<Vec<String>>,
     /// Environment variables for this command
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub environment: Option<Vec<(String, String)>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[serde(untagged)]
+pub enum Executable {
+    /// A remote executable file verified using a SHA256 hash
+    Remote(RemoteExecutable),
+    /// A local executable file
+    Local(PathBuf),
+    /// An executable file with a Scoop package dependency
+    Scoop(ScoopExecutable),
+}
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[serde(rename_all = "PascalCase")]
+pub struct RemoteExecutable {
+    /// Url to a remote executable
+    pub url: RemoteUrl,
+    /// Sha256 hash of the remote executable at
+    pub hash: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[serde(untagged)]
+pub enum ScoopExecutable {
+    // TODO: this will depend on a hosted service accessible through the individual
+    // commercial use license which can identify a manifest revision in a scoop bucket's
+    // git history using a combination of bucket + package + version
+    Package(ScoopPackage),
+    /// A Scoop package identified using a raw manifest
+    Manifest(ScoopManifest),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[serde(rename_all = "PascalCase")]
+pub enum ScoopBucket {
+    Main,
+    Extras,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[serde(rename_all = "PascalCase")]
+pub struct ScoopPackage {
+    /// Bucket that the package is found in
+    bucket: ScoopBucket,
+    /// Name of the package
+    package: String,
+    /// Version of the package
+    version: String,
+    /// Target executable in the package
+    #[serde(skip_serializing_if = "Option::is_none")]
+    target: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[serde(rename_all = "PascalCase")]
+pub struct ScoopManifest {
+    /// Name of the package
+    pub package: String,
+    /// Version of the package
+    pub version: String,
+    /// Url to a Scoop manifest
+    pub manifest: RemoteUrl,
+    /// Target executable in the package
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RemoteUrl(pub Url);
+
+impl Deref for RemoteUrl {
+    type Target = Url;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl JsonSchema for RemoteUrl {
+    fn schema_name() -> String {
+        "RemoteUrl".to_string()
+    }
+
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
+        SchemaObject {
+            instance_type: Some(InstanceType::String.into()),
+            ..Default::default()
+        }
+        .into()
+    }
+}
+
+impl Display for Executable {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.pathbuf().unwrap().to_string_lossy())
+    }
+}
+
+impl TryInto<PathBuf> for Executable {
+    type Error = ProcessManagerError;
+
+    fn try_into(self) -> Result<PathBuf, Self::Error> {
+        self.pathbuf()
+    }
+}
+
+impl Executable {
+    pub fn pathbuf(&self) -> Result<PathBuf, ProcessManagerError> {
+        match self {
+            Executable::Local(local) => Ok(local.clone()),
+            Executable::Remote(remote) => {
+                let cached_executable_path = self.cached_executable_path()?;
+                if cached_executable_path.is_file() {
+                    tracing::debug!(
+                        "using cached executable {}",
+                        cached_executable_path.display()
+                    );
+                    Ok(cached_executable_path)
+                } else {
+                    tracing::info!("downloading and caching executable from {}", remote.url.0);
+                    self.download_remote_executable()?;
+                    Ok(cached_executable_path)
+                }
+            }
+            Executable::Scoop(scoop) => match scoop {
+                ScoopExecutable::Package(_) => todo!(),
+                ScoopExecutable::Manifest(manifest) => {
+                    let cached_executable_path = self.cached_executable_path()?;
+                    if cached_executable_path.is_file() {
+                        tracing::debug!(
+                            "using scoop executable {}",
+                            cached_executable_path.display()
+                        );
+
+                        Ok(cached_executable_path)
+                    } else {
+                        tracing::info!(
+                            "installing scoop manifest {}",
+                            manifest.manifest.to_string()
+                        );
+                        self.download_remote_executable()?;
+                        Ok(cached_executable_path)
+                    }
+                }
+            },
+        }
+    }
+
+    pub fn cached_executable_path(&self) -> Result<PathBuf, ProcessManagerError> {
+        match self {
+            Executable::Local(executable) => Ok(executable.clone()),
+            Executable::Remote(remote) => {
+                let stringified = remote.url.to_string();
+                let filename = stringified
+                    .split('/')
+                    .last()
+                    .map(String::from)
+                    .unwrap_or_default();
+
+                let mut stringified_parent = stringified.clone();
+                stringified_parent = stringified_parent
+                    .trim_start_matches("https://")
+                    .to_string();
+                stringified_parent = stringified_parent.trim_end_matches(&filename).to_string();
+                stringified_parent = stringified_parent.replace("/", "_").to_string();
+                stringified_parent = stringified_parent.trim_end_matches("_").to_string();
+
+                let cache_parent_dir = wpm_store_dir().join(&stringified_parent);
+                std::fs::create_dir_all(&cache_parent_dir)?;
+                Ok(cache_parent_dir.join(filename).clone())
+            }
+            Executable::Scoop(scoop) => match scoop {
+                ScoopExecutable::Package(_) => todo!(),
+                ScoopExecutable::Manifest(manifest) => Ok(home_dir()
+                    .unwrap()
+                    .join("scoop")
+                    .join("apps")
+                    .join(&manifest.package)
+                    .join(&manifest.version)
+                    .join(
+                        manifest
+                            .target
+                            .clone()
+                            .unwrap_or_else(|| format!("{}.exe", manifest.package)),
+                    )),
+            },
+        }
+    }
+
+    pub fn download_remote_executable(&self) -> Result<(), ProcessManagerError> {
+        match self {
+            Executable::Local(_) => {}
+            Executable::Remote(remote) => {
+                if let Ok(path) = self.cached_executable_path() {
+                    let bytes = reqwest_client()
+                        .get(remote.url.to_string())
+                        .send()?
+                        .bytes()?;
+
+                    let digest = sha256::digest(&*bytes);
+
+                    if digest == remote.hash {
+                        std::fs::write(&path, bytes)?;
+                        tracing::info!("downloaded remote executable to {}", path.display());
+                    } else {
+                        tracing::error!(
+                            "remote executable hash mismatch for {} (expected {digest}, actual {})",
+                            remote.url.0,
+                            remote.hash
+                        );
+                        return Err(ProcessManagerError::HashMismatch {
+                            actual: digest,
+                            expected: remote.hash.clone(),
+                        });
+                    }
+                }
+            }
+            Executable::Scoop(scoop) => match scoop {
+                ScoopExecutable::Package(_) => {}
+                ScoopExecutable::Manifest(manifest) => {
+                    let scoop = home_dir()
+                        .unwrap()
+                        .join("scoop")
+                        .join("shims")
+                        .join("scoop.cmd");
+
+                    let output = Command::new(scoop)
+                        .arg("install")
+                        .arg(manifest.manifest.to_string())
+                        .output()?;
+
+                    println!("{}", String::from_utf8_lossy(&output.stdout));
+
+                    if !output.status.success() {
+                        tracing::error!(
+                            "failed to install scoop manifest {}",
+                            manifest.manifest.to_string()
+                        );
+                    }
+                }
+            },
+        }
+
+        Ok(())
+    }
 }
 
 impl ServiceCommand {
@@ -116,10 +382,12 @@ impl ServiceCommand {
             .unwrap()
             .to_string();
 
-        let stringified = self.executable.to_string_lossy();
-        let stringified = stringified.replace("$USERPROFILE", &home_dir);
-        let executable = PathBuf::from(stringified);
-        self.executable = executable;
+        if matches!(self.executable, Executable::Local(_)) {
+            let stringified = self.executable.to_string();
+            let stringified = stringified.replace("$USERPROFILE", &home_dir);
+            let executable = PathBuf::from(stringified);
+            self.executable = Executable::Local(executable);
+        }
 
         for arg in self.arguments.iter_mut().flatten() {
             *arg = arg.replace("$USERPROFILE", &home_dir);
@@ -131,7 +399,7 @@ impl ServiceCommand {
     }
 
     pub fn to_silent_command(&self, global_environment: Option<Vec<(String, String)>>) -> Command {
-        let mut command = Command::new(&self.executable);
+        let mut command = Command::new(self.executable.pathbuf().unwrap());
         if let Some(arguments) = &self.arguments {
             command.args(arguments);
         }
@@ -169,13 +437,9 @@ impl Definition {
 
         for command in self.service.exec_start_pre.iter().flatten() {
             let stringified = if let Some(args) = &command.arguments {
-                format!(
-                    "{} {}",
-                    command.executable.to_string_lossy(),
-                    args.join(" ")
-                )
+                format!("{} {}", command.executable, args.join(" "))
             } else {
-                command.executable.to_string_lossy().to_string()
+                command.executable.to_string()
             };
 
             tracing::info!("{name}: executing pre-start command - {stringified}");
@@ -215,13 +479,9 @@ impl Definition {
 
                             for command in exec_start_post_thread.iter().flatten() {
                                 let stringified = if let Some(args) = &command.arguments {
-                                    format!(
-                                        "{} {}",
-                                        command.executable.to_string_lossy(),
-                                        args.join(" ")
-                                    )
+                                    format!("{} {}", command.executable, args.join(" "))
                                 } else {
-                                    command.executable.to_string_lossy().to_string()
+                                    command.executable.to_string()
                                 };
 
                                 tracing::info!(
@@ -234,13 +494,9 @@ impl Definition {
 
                             for command in exec_stop_thread.iter().flatten() {
                                 let stringified = if let Some(args) = &command.arguments {
-                                    format!(
-                                        "{} {}",
-                                        command.executable.to_string_lossy(),
-                                        args.join(" ")
-                                    )
+                                    format!("{} {}", command.executable, args.join(" "))
                                 } else {
-                                    command.executable.to_string_lossy().to_string()
+                                    command.executable.to_string()
                                 };
 
                                 tracing::info!("{name}: executing cleanup command - {stringified}");
@@ -413,13 +669,9 @@ impl Definition {
 
             for command in self.service.exec_start_post.iter().flatten() {
                 let stringified = if let Some(args) = &command.arguments {
-                    format!(
-                        "{} {}",
-                        command.executable.to_string_lossy(),
-                        args.join(" ")
-                    )
+                    format!("{} {}", command.executable, args.join(" "))
                 } else {
-                    command.executable.to_string_lossy().to_string()
+                    command.executable.to_string()
                 };
 
                 tracing::info!("{name}: executing post-start command - {stringified}");
@@ -457,13 +709,9 @@ impl Definition {
                     // Execute cleanup commands
                     for command in exec_stop_post.iter().flatten() {
                         let stringified = if let Some(args) = &command.arguments {
-                            format!(
-                                "{} {}",
-                                command.executable.to_string_lossy(),
-                                args.join(" ")
-                            )
+                            format!("{} {}", command.executable, args.join(" "))
                         } else {
-                            command.executable.to_string_lossy().to_string()
+                            command.executable.to_string()
                         };
 
                         tracing::info!("{name}: executing cleanup command - {stringified}");
@@ -528,9 +776,7 @@ impl Definition {
     }
 
     pub fn log_path(&self) -> PathBuf {
-        wpm_data_dir()
-            .join("logs")
-            .join(format!("{}.log", self.unit.name))
+        wpm_log_dir().join(format!("{}.log", self.unit.name))
     }
 }
 
@@ -547,12 +793,15 @@ pub struct CommandHealthcheck {
     /// Executable name or absolute path to an executable
     pub executable: PathBuf,
     /// Arguments passed to the executable
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub arguments: Option<Vec<String>>,
     /// Environment variables for this command
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub environment: Option<Vec<(String, String)>>,
     /// The number of seconds to delay before checking for liveness
     pub delay_sec: u64,
     /// The maximum number of retries (default: 5)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub retry_limit: Option<u8>,
 }
 
@@ -610,6 +859,7 @@ impl CommandHealthcheck {
 #[serde(rename_all = "PascalCase")]
 pub struct ProcessHealthcheck {
     /// An optional binary with which to check process liveness
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<PathBuf>,
     /// The number of seconds to delay before checking for liveness
     pub delay_sec: u64,
@@ -651,7 +901,7 @@ impl From<&Definition> for Command {
         let stdout = file.try_clone().unwrap();
         let stderr = stdout.try_clone().unwrap();
 
-        let mut command = Command::new(&value.service.exec_start.executable);
+        let mut command = Command::new(value.service.exec_start.executable.pathbuf().unwrap());
 
         let mut environment_variables = vec![];
 

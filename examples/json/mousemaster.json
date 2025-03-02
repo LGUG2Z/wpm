@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LGUG2Z/wpm/refs/heads/master/schema.unit.json",
+  "Unit": {
+    "Name": "mousemaster",
+    "Description": "A keyboard driven interface for mouseless mouse manipulation",
+    "Requires": [
+      "whkd",
+      "kanata"
+    ]
+  },
+  "Service": {
+    "Kind": "Simple",
+    "ExecStart": {
+      "Executable": {
+        "Url": "https://github.com/petoncle/mousemaster/releases/download/69/mousemaster.exe",
+        "Hash": "fb01d97beaa9b84ce312e5c5fe2976124c5cb4316a10b4541f985566731a36ab"
+      },
+      "Arguments": [
+        "--configuration-file=$USERPROFILE/Downloads/mousemaster.properties",
+        "--pause-on-error=false"
+      ]
+    },
+    "Healthcheck": {
+      "Process": {
+        "DelaySec": 2
+      }
+    },
+    "Restart": "OnFailure",
+    "RestartSec": 2
+  }
+}

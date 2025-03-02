@@ -13,6 +13,16 @@ pub mod unit;
 mod unit_status;
 
 static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+static REQWEST_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
+
+pub fn reqwest_client() -> reqwest::blocking::Client {
+    REQWEST_CLIENT
+        .get_or_init(|| {
+            let builder = reqwest::blocking::Client::builder();
+            builder.user_agent("wpm").build().unwrap()
+        })
+        .clone()
+}
 
 pub fn wpm_data_dir() -> PathBuf {
     DATA_DIR
@@ -29,9 +39,22 @@ pub fn wpm_data_dir() -> PathBuf {
             std::fs::create_dir_all(&log_dir)
                 .expect("could not ensure creation of the wpm logs local data dir");
 
+            let store_dir = wpm_dir.join("store");
+
+            std::fs::create_dir_all(&store_dir)
+                .expect("could not ensure creation of the wpm store local data dir");
+
             wpm_dir
         })
         .clone()
+}
+
+pub fn wpm_store_dir() -> PathBuf {
+    wpm_data_dir().join("store")
+}
+
+pub fn wpm_log_dir() -> PathBuf {
+    wpm_data_dir().join("logs")
 }
 
 #[derive(Debug, Serialize, Deserialize)]

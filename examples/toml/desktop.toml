@@ -1,9 +1,10 @@
 [Unit]
 Name = "desktop"
-Description = "everything I need to work on Windows"
+Description = "Everything I need to work on Windows"
 Requires = [
     "komorebi",
     "komorebi-bar",
+    "mousemaster",
 ]
 
 [Service]

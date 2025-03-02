@@ -1,6 +1,6 @@
 [Unit]
 Name = "komorebi"
-Description = "tiling window management for Windows"
+Description = "Tiling window management for Windows"
 Requires = [
     "whkd",
     "kanata",

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LGUG2Z/wpm/refs/heads/master/schema.unit.json",
+  "Unit": {
+    "Name": "komorebi-bar",
+    "Description": "Status bar for komorebi",
+    "Requires": [
+      "komorebi"
+    ]
+  },
+  "Service": {
+    "Kind": "Simple",
+    "ExecStart": {
+      "Executable": "komorebi-bar.exe",
+      "Arguments": [
+        "--config",
+        "$USERPROFILE/.config/komorebi/komorebi.bar.json"
+      ]
+    },
+    "Environment": [
+      [
+        "KOMOREBI_CONFIG_HOME",
+        "$USERPROFILE/.config/komorebi"
+      ]
+    ],
+    "Healthcheck": {
+      "Process": {
+        "DelaySec": 1
+      }
+    },
+    "Restart": "Never"
+  }
+}

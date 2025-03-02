@@ -32,8 +32,16 @@ _wpm_ is a simple user process manager for Microsoft Windows 11 and above.
 
 _wpm_ allows you to start, stop and manage user level background processes as defined in unit files.
 
-_wpm_ is a free and educational source project, and one that encourages you to make charitable donations if you find
-the software to be useful and have the financial means.
+_wpm_ allows you to codify availability and dependency relationships between different units.
+
+_wpm_ allows you to configure healthchecks for different units, with custom retry and back-off strategies.
+
+_wpm_ allows you to pin executables in your unit files to specific versions via remote package manifests.
+
+_wpm_ provides a comprehensive collection of lifecycle hooks which can be set for each unit.
+
+_wpm_ is not an open source project, but an educational source project which is free for personal use, and one that
+encourages you to make charitable donations if you find the software to be useful and have the financial means.
 
 I encourage you to make a charitable donation to
 the [Palestine Children's Relief Fund](https://pcrf1.app.neoncrm.com/forms/gaza-recovery) or contributing to
@@ -63,6 +71,7 @@ cargo install --git https://github.com/LGUG2Z/wpm wpmctl
 - Run `wpmctl start <UNIT>` (or whatever your unit name is) to start the process
 - Run `wpmctl stop <UNIT>` (or whatever your unit name is) to stop the process
 - Run `wpmctl reload` to reload all unit definitions (useful if you're making changes)
+- Run `wpmctl rebuild` to install manifests for remote executable sources
 
 ## Process Monitoring
 
@@ -145,8 +154,8 @@ hard-forks) based on the software.
 Anyone is free to make their own fork of `wpm` with changes intended
 either for personal use or for integration back upstream via pull requests.
 
-The [Komorebi 1.0.0 License](./LICENSE.md) does not permit any kind of
-commercial use.
+_The [Komorebi 1.0.0 License](./LICENSE.md) does not permit any kind of
+commercial use._
 
 ### Contribution licensing
 

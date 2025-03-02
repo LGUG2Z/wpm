@@ -1,6 +1,6 @@
 [Unit]
 Name = "whkd"
-Description = "simple hotkey daemon for Windows"
+Description = "Simple hotkey daemon for Windows"
 
 [Service]
 Kind = "Simple"
