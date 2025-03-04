@@ -296,6 +296,27 @@ impl ProcessManager {
                 *working_directory = directory;
             }
 
+            if let Some(environment_file) = &definition.service.environment_file {
+                let stringified = environment_file.to_string_lossy();
+                let stringified = stringified.replace("$USERPROFILE", &home_dir);
+                let environment_file = PathBuf::from(stringified);
+
+                if let Ok(environment) =
+                    serde_envfile::from_file::<serde_envfile::Value>(&environment_file)
+                {
+                    for (k, v) in environment.iter() {
+                        match &mut definition.service.environment {
+                            None => {
+                                definition.service.environment = Some(vec![(k.clone(), v.clone())])
+                            }
+                            Some(e) => {
+                                e.push((k.clone(), v.clone()));
+                            }
+                        }
+                    }
+                }
+            }
+
             for (_, value) in definition.service.environment.iter_mut().flatten() {
                 *value = value.replace("$USERPROFILE", &home_dir);
             }
