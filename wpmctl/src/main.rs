@@ -20,8 +20,10 @@ use wpm::wpm_data_dir;
 use wpm::wpm_units_dir;
 use wpm::SocketMessage;
 
+shadow_rs::shadow!(build);
+
 #[derive(Parser)]
-#[clap(author, about, version)]
+#[clap(author, about, version = build::CLAP_LONG_VERSION)]
 struct Opts {
     #[clap(subcommand)]
     subcmd: SubCommand,

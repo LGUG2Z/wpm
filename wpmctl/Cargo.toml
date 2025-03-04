@@ -8,6 +8,9 @@ wpm = { path = "../wpm" }
 
 chrono = { workspace = true }
 clap = { workspace = true }
-interprocess = { workspace = true }
-
 fs-tail = "0.1"
+interprocess = { workspace = true }
+shadow-rs = { workspace = true }
+
+[build-dependencies]
+shadow-rs = { workspace = true }

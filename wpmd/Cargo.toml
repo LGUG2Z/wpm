@@ -6,15 +6,19 @@ edition = "2021"
 [dependencies]
 wpm = { path = "../wpm" }
 
+clap = { workspace = true }
 color-eyre = { workspace = true }
+ctrlc = "3"
 interprocess = { workspace = true }
 parking_lot = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+shadow-rs = { workspace = true }
 sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+tracing-appender = "0.2"
 tracing-subscriber = { workspace = true }
 
-tracing-appender = "0.2"
-ctrlc = "3"
+[build-dependencies]
+shadow-rs = { workspace = true }

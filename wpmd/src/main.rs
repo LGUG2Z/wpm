@@ -1,5 +1,6 @@
 #![warn(clippy::all)]
 
+use clap::Parser;
 use interprocess::local_socket::traits::Listener;
 use interprocess::local_socket::GenericNamespaced;
 use interprocess::local_socket::ListenerOptions;
@@ -22,7 +23,13 @@ use wpm::process_manager::ProcessManager;
 use wpm::process_manager::ProcessManagerError;
 use wpm::SocketMessage;
 
+shadow_rs::shadow!(build);
+
 static SOCKET_NAME: &str = "wpmd.sock";
+
+#[derive(Parser)]
+#[clap(author, about, version = build::CLAP_LONG_VERSION)]
+struct Opts;
 
 #[derive(Error, Debug)]
 pub enum WpmdError {
@@ -35,6 +42,8 @@ pub enum WpmdError {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _opts: Opts = Opts::parse();
+
     if std::env::var("RUST_LIB_BACKTRACE").is_err() {
         std::env::set_var("RUST_LIB_BACKTRACE", "1");
     }
