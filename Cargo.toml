@@ -20,3 +20,4 @@ sysinfo = { git = "https://github.com/GuillaumeGomez/sysinfo", rev = "6ddf3fe1f6
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+shadow-rs = "1"
