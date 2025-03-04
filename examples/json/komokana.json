@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LGUG2Z/wpm/refs/heads/master/schema.unit.json",
+  "Unit": {
+    "Name": "komokana",
+    "Description": "Automatic application-aware keyboard layer switching for Windows",
+    "Requires": [
+      "komorebi",
+      "kanata"
+    ]
+  },
+  "Service": {
+    "Kind": "Simple",
+    "Autostart": true,
+    "ExecStart": {
+      "Executable": "komokana.exe",
+      "Arguments": [
+        "--kanata-port",
+        "9999",
+        "--configuration",
+        "$USERPROFILE/komokana.yaml",
+        "--default-layer",
+        "qwerty"
+      ]
+    },
+    "Healthcheck": {
+      "Process": {
+        "DelaySec": 1
+      }
+    },
+    "Restart": "OnFailure",
+    "RestartSec": 2
+  }
+}

@@ -89,6 +89,8 @@ enum SubCommand {
     Log(Log),
     /// Ensure all remote dependencies are downloaded and built
     Rebuild,
+    /// Print the path to the wpm global unit definition directory
+    Units,
 }
 
 fn listen_for_response() -> Result<String, Box<dyn std::error::Error>> {
@@ -197,6 +199,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("[{name}]: Already exists at {}", path.display());
                 }
             }
+        }
+        SubCommand::Units => {
+            println!("{}", wpm_data_dir().join("units").display());
         }
     }
 

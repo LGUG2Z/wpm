@@ -230,6 +230,39 @@ impl Definition {
             Self {
                 schema: None,
                 unit: Unit {
+                    name: "komokana".to_string(),
+                    description: Some("Automatic application-aware keyboard layer switching for Windows".to_string()),
+                    requires: Some(vec!["komorebi".to_string(), "kanata".to_string()]),
+                },
+                service: Service {
+                    kind: ServiceKind::Simple,
+                    exec_start: ServiceCommand {
+                        executable: Executable::Local(PathBuf::from("komokana.exe")),
+                        arguments: Some(vec![
+                            "--kanata-port".to_string(),
+                            "9999".to_string(),
+                            "--configuration".to_string(),
+                            "$USERPROFILE/komokana.yaml".to_string(),
+                            "--default-layer".to_string(),
+                            "qwerty".to_string()
+                        ]),
+                        environment: None,
+                    },
+                    environment: None,
+                    working_directory: None,
+                    healthcheck: Some(Healthcheck::default()),
+                    restart: RestartStrategy::OnFailure,
+                    restart_sec: Some(2),
+                    exec_stop: None,
+                    exec_stop_post: None,
+                    autostart: true,
+                    exec_start_pre: None,
+                    exec_start_post: None,
+                },
+            },
+            Self {
+                schema: None,
+                unit: Unit {
                     name: "desktop".to_string(),
                     description: Some("Everything I need to work on Windows".to_string()),
                     requires: Some(vec!["komorebi".to_string(), "komorebi-bar".to_string(), "mousemaster".to_string()]),
