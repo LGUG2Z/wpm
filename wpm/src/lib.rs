@@ -57,6 +57,13 @@ pub fn wpm_log_dir() -> PathBuf {
     wpm_data_dir().join("logs")
 }
 
+pub fn wpm_units_dir() -> PathBuf {
+    dirs::home_dir()
+        .expect("could not find home dir")
+        .join(".config")
+        .join("wpm")
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum SocketMessage {
     Start(Vec<String>),
