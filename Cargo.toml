@@ -16,7 +16,6 @@ interprocess = { version = "2" }
 parking_lot = "0.12"
 serde = { version = "1",  features = ["derive"]}
 serde_json = "1"
-serde_any = "0.5"
 sysinfo = { git = "https://github.com/GuillaumeGomez/sysinfo", rev = "6ddf3fe1f6b1f60aaaabf15a3b5608ba6dc5278b"}
 thiserror = "2"
 tracing = "0.1"

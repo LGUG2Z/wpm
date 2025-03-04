@@ -100,6 +100,9 @@ pub struct Service {
     /// Environment variables inherited by all commands in this service definition
     #[serde(skip_serializing_if = "Option::is_none")]
     pub environment: Option<Vec<(String, String)>>,
+    /// Path to an environment file, containing environment variables inherited by all commands in this service definition
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub environment_file: Option<PathBuf>,
     /// Working directory for this service definition
     #[serde(skip_serializing_if = "Option::is_none")]
     pub working_directory: Option<PathBuf>,
@@ -127,6 +130,9 @@ pub struct ServiceCommand {
     /// Environment variables for this command
     #[serde(skip_serializing_if = "Option::is_none")]
     pub environment: Option<Vec<(String, String)>>,
+    /// Path to an environment file, containing environment variables for this command
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub environment_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
@@ -391,6 +397,25 @@ impl ServiceCommand {
 
         for arg in self.arguments.iter_mut().flatten() {
             *arg = arg.replace("$USERPROFILE", &home_dir);
+        }
+
+        if let Some(environment_file) = &self.environment_file {
+            let stringified = environment_file.to_string_lossy();
+            let stringified = stringified.replace("$USERPROFILE", &home_dir);
+            let environment_file = PathBuf::from(stringified);
+
+            if let Ok(environment) =
+                serde_envfile::from_file::<serde_envfile::Value>(&environment_file)
+            {
+                for (k, v) in environment.iter() {
+                    match &mut self.environment {
+                        None => self.environment = Some(vec![(k.clone(), v.clone())]),
+                        Some(e) => {
+                            e.push((k.clone(), v.clone()));
+                        }
+                    }
+                }
+            }
         }
 
         for (_, value) in self.environment.iter_mut().flatten() {
