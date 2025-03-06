@@ -1,0 +1,59 @@
+[graph]
+targets = [
+    "x86_64-pc-windows-msvc",
+    "i686-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+]
+all-features = false
+no-default-features = false
+
+[output]
+feature-depth = 1
+
+[advisories]
+ignore = []
+
+[licenses]
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Zlib",
+    "LicenseRef-Komorebi-1.0",
+]
+confidence-threshold = 0.8
+
+[[licenses.clarify]]
+crate = "wpm"
+expression = "LicenseRef-Komorebi-1.0"
+license-files = []
+
+[[licenses.clarify]]
+crate = "wpmd"
+expression = "LicenseRef-Komorebi-1.0"
+license-files = []
+
+[[licenses.clarify]]
+crate = "wpmctl"
+expression = "LicenseRef-Komorebi-1.0"
+license-files = []
+
+[bans]
+multiple-versions = "allow"
+wildcards = "allow"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = ["https://github.com/GuillaumeGomez/sysinfo"]
