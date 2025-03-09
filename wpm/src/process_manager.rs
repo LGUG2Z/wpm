@@ -166,12 +166,12 @@ impl ProcessManager {
         };
 
         pm.load_units()?;
-        pm.autostart()?;
+        pm.autostart();
 
         Ok(pm)
     }
 
-    pub fn autostart(&mut self) -> Result<(), ProcessManagerError> {
+    pub fn autostart(&mut self) {
         let mut autostart = vec![];
 
         for (name, def) in &self.definitions {
@@ -182,10 +182,10 @@ impl ProcessManager {
 
         for name in &autostart {
             tracing::info!("{name}: autostarting");
-            self.start(name)?;
+            if let Err(error) = self.start(name) {
+                tracing::error!("{error}");
+            }
         }
-
-        Ok(())
     }
 
     pub fn retrieve_units() -> Result<Vec<Definition>, ProcessManagerError> {
