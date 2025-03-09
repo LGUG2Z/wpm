@@ -8,6 +8,17 @@
     "Unit"
   ],
   "properties": {
+    "Resources": {
+      "description": "Remote resources used by this definition",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
     "Schema": {
       "description": "JSON Schema definition for auto completions",
       "type": [
@@ -179,16 +190,10 @@
         },
         "Url": {
           "description": "Url to a remote executable",
-          "allOf": [
-            {
-              "$ref": "#/definitions/RemoteUrl"
-            }
-          ]
+          "type": "string",
+          "format": "uri"
         }
       }
-    },
-    "RemoteUrl": {
-      "type": "string"
     },
     "RestartStrategy": {
       "description": "Information about a wpm definition's restart strategy",
@@ -231,11 +236,8 @@
       "properties": {
         "Manifest": {
           "description": "Url to a Scoop manifest",
-          "allOf": [
-            {
-              "$ref": "#/definitions/RemoteUrl"
-            }
-          ]
+          "type": "string",
+          "format": "uri"
         },
         "Package": {
           "description": "Name of the package",
@@ -317,6 +319,13 @@
             "maxItems": 2,
             "minItems": 2
           }
+        },
+        "EnvironmentFile": {
+          "description": "Path to an environment file, containing environment variables inherited by all commands in this service definition",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "ExecStart": {
           "description": "Command executed by this service definition",
@@ -449,6 +458,13 @@
             "maxItems": 2,
             "minItems": 2
           }
+        },
+        "EnvironmentFile": {
+          "description": "Path to an environment file, containing environment variables for this command",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "Executable": {
           "description": "Executable (local file, remote file, or Scoop package)",

@@ -181,11 +181,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         SubCommand::Rebuild => {
-            let units = ProcessManager::retrieve_units()?;
-            for unit in units {
-                let name = unit.unit.name;
-                let executable = unit.service.exec_start.executable;
-                let url = match &executable {
+            let mut units = ProcessManager::retrieve_units()?;
+            for definition in &mut units {
+                let name = &definition.unit.name;
+                let executable = &definition.service.exec_start.executable;
+                let url = match executable {
                     Executable::Remote(remote) => remote.url.to_string(),
                     Executable::Scoop(scoop) => match scoop {
                         ScoopExecutable::Package(_) => continue,
@@ -200,6 +200,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     executable.download_remote_executable()?;
                 } else {
                     println!("[{name}]: Already exists at {}", path.display());
+                }
+
+                if definition.resources.is_some() {
+                    println!("[{name}]: Resolving remote resources");
+                    definition.resolve_resources()?;
                 }
             }
         }

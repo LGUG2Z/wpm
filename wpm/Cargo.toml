@@ -15,10 +15,11 @@ shared_child = "1"
 sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+regex = "1"
 reqwest = { version = "0.12", features = ["blocking"] }
 url = { version = "2", features = ["serde"] }
 sha256 = "1"
 
-schemars = "0.8"
+schemars = { version = "0.8", features = ["url"] }
 tabled = { version = "0.18", features = ["derive"] }
 toml = "0.8"

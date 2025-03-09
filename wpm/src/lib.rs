@@ -1,9 +1,11 @@
 #![warn(clippy::all)]
 
+use regex::Regex;
 use serde::Deserialize;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::OnceLock;
+use tracing::warn;
 
 pub mod communication;
 mod generators;
@@ -15,6 +17,11 @@ mod unit_status;
 static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 static REQWEST_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
 
+static RESOURCE_REGEX: OnceLock<Regex> = OnceLock::new();
+
+pub fn resource_regex<'regex>() -> &'regex Regex {
+    RESOURCE_REGEX.get_or_init(|| Regex::new(r"\{\{\s*Resources\.([A-Za-z0-9_]+)\s*\}\}").unwrap())
+}
 pub fn reqwest_client() -> reqwest::blocking::Client {
     REQWEST_CLIENT
         .get_or_init(|| {

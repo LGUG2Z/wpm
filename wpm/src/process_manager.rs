@@ -256,6 +256,8 @@ impl ProcessManager {
                 None => continue,
             };
 
+            definition.resolve_resources()?;
+
             if matches!(definition.service.kind, ServiceKind::Forking) {
                 let mut is_valid_forking_service = false;
                 if let Some(Healthcheck::Process(proc)) = &definition.service.healthcheck {

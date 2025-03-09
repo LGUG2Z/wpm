@@ -4,7 +4,6 @@ use crate::unit::Executable;
 use crate::unit::Healthcheck;
 use crate::unit::ProcessHealthcheck;
 use crate::unit::RemoteExecutable;
-use crate::unit::RemoteUrl;
 use crate::unit::RestartStrategy;
 use crate::unit::ScoopExecutable;
 use crate::unit::ScoopManifest;
@@ -33,11 +32,12 @@ impl Definition {
                     description: Some("Software keyboard remapper".to_string()),
                     requires: None,
                 },
+                resources: None,
                 service: Service {
                     kind: ServiceKind::Simple,
                     exec_start: ServiceCommand {
                         executable: Executable::Scoop(ScoopExecutable::Manifest(ScoopManifest {
-                            manifest: RemoteUrl(Url::from_str("https://raw.githubusercontent.com/ScoopInstaller/Extras/653cfbfc224e40343a49510b2f47dd30c5ca7790/bucket/kanata.json").unwrap()),
+                            manifest: Url::from_str("https://raw.githubusercontent.com/ScoopInstaller/Extras/653cfbfc224e40343a49510b2f47dd30c5ca7790/bucket/kanata.json").unwrap(),
                             package: "kanata".to_string(),
                             version: "1.8.0".to_string(),
                             target: None
@@ -71,6 +71,7 @@ impl Definition {
                     description: Some("Focus follows mouse for Windows".to_string()),
                     requires: Some(vec!["komorebi".to_string()]),
                 },
+                resources: None,
                 service: Service {
                     kind: ServiceKind::Simple,
                     exec_start: ServiceCommand {
@@ -99,6 +100,7 @@ impl Definition {
                     description: Some("Status bar for komorebi".to_string()),
                     requires: Some(vec!["komorebi".to_string()]),
                 },
+                resources: None,
                 service: Service {
                     kind: ServiceKind::Simple,
                     environment: Some(vec![(
@@ -133,6 +135,7 @@ impl Definition {
                     description: Some("Tiling window management for Windows".to_string()),
                     requires: Some(vec!["whkd".to_string(), "kanata".to_string()]),
                 },
+                resources: None,
                 service: Service {
                     kind: ServiceKind::Simple,
                     exec_start: ServiceCommand {
@@ -183,6 +186,7 @@ impl Definition {
                     description: Some("Simple hotkey daemon for Windows".to_string()),
                     requires: None,
                 },
+                resources: None,
                 service: Service {
                     kind: ServiceKind::Simple,
                     exec_start: ServiceCommand {
@@ -211,11 +215,12 @@ impl Definition {
                     description: Some("A keyboard driven interface for mouseless mouse manipulation".to_string()),
                     requires: Some(vec!["whkd".to_string(), "kanata".to_string()]),
                 },
+                resources: None,
                 service: Service {
                     kind: ServiceKind::Simple,
                     exec_start: ServiceCommand {
                         executable: Executable::Remote(RemoteExecutable {
-                            url: RemoteUrl(Url::from_str("https://github.com/petoncle/mousemaster/releases/download/69/mousemaster.exe").unwrap()),
+                            url: Url::from_str("https://github.com/petoncle/mousemaster/releases/download/69/mousemaster.exe").unwrap(),
                             hash: "fb01d97beaa9b84ce312e5c5fe2976124c5cb4316a10b4541f985566731a36ab".to_string()
                         }),
                         arguments: Some(vec![
@@ -248,6 +253,7 @@ impl Definition {
                     description: Some("Automatic application-aware keyboard layer switching for Windows".to_string()),
                     requires: Some(vec!["komorebi".to_string(), "kanata".to_string()]),
                 },
+                resources: None,
                 service: Service {
                     kind: ServiceKind::Simple,
                     exec_start: ServiceCommand {
@@ -283,6 +289,7 @@ impl Definition {
                     description: Some("Everything I need to work on Windows".to_string()),
                     requires: Some(vec!["komorebi".to_string(), "komorebi-bar".to_string(), "mousemaster".to_string()]),
                 },
+                resources: None,
                 service: Service {
                     kind: ServiceKind::Oneshot,
                     exec_start: ServiceCommand {

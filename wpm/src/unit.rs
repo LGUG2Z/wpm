@@ -3,6 +3,7 @@ use crate::process_manager::Child;
 use crate::process_manager::ProcessManagerError;
 use crate::process_manager::ProcessState;
 use crate::reqwest_client;
+use crate::resource_regex;
 use crate::wpm_log_dir;
 use crate::wpm_store_dir;
 use crate::SocketMessage;
@@ -10,10 +11,6 @@ use chrono::DateTime;
 use chrono::Utc;
 use dirs::home_dir;
 use parking_lot::Mutex;
-use schemars::gen::SchemaGenerator;
-use schemars::schema::InstanceType;
-use schemars::schema::Schema;
-use schemars::schema::SchemaObject;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -22,7 +19,6 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fs::File;
-use std::ops::Deref;
 use std::ops::Not;
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
@@ -44,6 +40,8 @@ pub struct Definition {
     pub schema: Option<String>,
     /// Information about this definition and its dependencies
     pub unit: Unit,
+    /// Remote resources used by this definition
+    pub resources: Option<HashMap<String, Url>>,
     /// Information about what this definition executes
     pub service: Service,
 }
@@ -149,7 +147,7 @@ pub enum Executable {
 #[serde(rename_all = "PascalCase")]
 pub struct RemoteExecutable {
     /// Url to a remote executable
-    pub url: RemoteUrl,
+    pub url: Url,
     /// Sha256 hash of the remote executable at
     pub hash: String,
 }
@@ -194,35 +192,10 @@ pub struct ScoopManifest {
     /// Version of the package
     pub version: String,
     /// Url to a Scoop manifest
-    pub manifest: RemoteUrl,
+    pub manifest: Url,
     /// Target executable in the package
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct RemoteUrl(pub Url);
-
-impl Deref for RemoteUrl {
-    type Target = Url;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl JsonSchema for RemoteUrl {
-    fn schema_name() -> String {
-        "RemoteUrl".to_string()
-    }
-
-    fn json_schema(_: &mut SchemaGenerator) -> Schema {
-        SchemaObject {
-            instance_type: Some(InstanceType::String.into()),
-            ..Default::default()
-        }
-        .into()
-    }
 }
 
 impl Display for Executable {
@@ -252,7 +225,7 @@ impl Executable {
                     );
                     Ok(cached_executable_path)
                 } else {
-                    tracing::info!("downloading and caching executable from {}", remote.url.0);
+                    tracing::info!("downloading and caching executable from {}", remote.url);
                     self.download_remote_executable()?;
                     Ok(cached_executable_path)
                 }
@@ -340,7 +313,7 @@ impl Executable {
                     } else {
                         tracing::error!(
                             "remote executable hash mismatch for {} (expected {digest}, actual {})",
-                            remote.url.0,
+                            remote.url,
                             remote.hash
                         );
                         return Err(ProcessManagerError::HashMismatch {
@@ -450,7 +423,115 @@ impl ServiceCommand {
     }
 }
 
+fn replace_interpolations(input: &str, resources: &HashMap<String, PathBuf>) -> String {
+    let mut output = input.to_string();
+
+    let re = resource_regex();
+
+    output = re
+        .replace_all(&output, |caps: &regex::Captures| {
+            let identifier = &caps[1];
+
+            resources
+                .get(identifier)
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_else(|| caps[0].to_string()) // If not found, leave the original string
+        })
+        .into_owned();
+    output
+}
+
 impl Definition {
+    pub fn resolve_resources(&mut self) -> Result<(), ProcessManagerError> {
+        if let Some(resources) = &self.resources {
+            let mut resource_map = HashMap::new();
+            'resources: for (identifier, url) in resources {
+                match store_ref_for_url(url) {
+                    Err(error) => {
+                        tracing::error!("{error}");
+                        continue 'resources;
+                    }
+                    Ok(store_ref) => {
+                        if !store_ref.is_file() {
+                            tracing::info!(
+                                "{}: adding resource {} to store",
+                                self.unit.name,
+                                store_ref.display()
+                            );
+                            match reqwest_client().get(url.to_string()).send() {
+                                Err(error) => {
+                                    tracing::error!("{error}");
+                                    continue 'resources;
+                                }
+                                Ok(response) => {
+                                    std::fs::write(&store_ref, response.bytes()?)?;
+                                }
+                            }
+                        } else {
+                            tracing::debug!(
+                                "{}: found resource {} in store",
+                                self.unit.name,
+                                store_ref.display()
+                            )
+                        }
+
+                        resource_map.insert(identifier.clone(), store_ref);
+                    }
+                }
+            }
+
+            for (_, v) in self.service.environment.iter_mut().flatten() {
+                *v = replace_interpolations(v, &resource_map);
+            }
+
+            for arg in self.service.exec_start.arguments.iter_mut().flatten() {
+                *arg = replace_interpolations(arg, &resource_map);
+            }
+
+            for (_, v) in self.service.exec_start.environment.iter_mut().flatten() {
+                *v = replace_interpolations(v, &resource_map);
+            }
+
+            for exec in self.service.exec_stop.iter_mut().flatten() {
+                for arg in exec.arguments.iter_mut().flatten() {
+                    *arg = replace_interpolations(arg, &resource_map);
+                }
+            }
+
+            for exec in self.service.exec_stop_post.iter_mut().flatten() {
+                for arg in exec.arguments.iter_mut().flatten() {
+                    *arg = replace_interpolations(arg, &resource_map);
+                }
+
+                for (_, v) in exec.environment.iter_mut().flatten() {
+                    *v = replace_interpolations(v, &resource_map);
+                }
+            }
+
+            for exec in self.service.exec_start_post.iter_mut().flatten() {
+                for arg in exec.arguments.iter_mut().flatten() {
+                    *arg = replace_interpolations(arg, &resource_map);
+                }
+
+                for (_, v) in exec.environment.iter_mut().flatten() {
+                    *v = replace_interpolations(v, &resource_map);
+                }
+            }
+
+            for exec in self.service.exec_start_pre.iter_mut().flatten() {
+                for arg in exec.arguments.iter_mut().flatten() {
+                    *arg = replace_interpolations(arg, &resource_map);
+                }
+
+                for (_, v) in exec.environment.iter_mut().flatten() {
+                    *v = replace_interpolations(v, &resource_map);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn execute(
         &self,
         running: Arc<Mutex<HashMap<String, ProcessState>>>,
@@ -955,4 +1036,26 @@ impl From<&Definition> for Command {
         command.stderr(stderr);
         command
     }
+}
+
+fn store_ref_for_url(url: &Url) -> Result<PathBuf, ProcessManagerError> {
+    let stringified = url.to_string();
+    let filename = stringified
+        .split('/')
+        .last()
+        .map(String::from)
+        .unwrap_or_default();
+
+    let mut stringified_parent = stringified.clone();
+    stringified_parent = stringified_parent
+        .trim_start_matches("https://")
+        .to_string();
+    stringified_parent = stringified_parent.trim_end_matches(&filename).to_string();
+    stringified_parent = stringified_parent.replace("/", "_").to_string();
+    stringified_parent = stringified_parent.trim_end_matches("_").to_string();
+
+    let cache_parent_dir = wpm_store_dir().join(&stringified_parent);
+    std::fs::create_dir_all(&cache_parent_dir)?;
+
+    Ok(cache_parent_dir.join(filename))
 }
