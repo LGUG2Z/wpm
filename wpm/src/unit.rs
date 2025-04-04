@@ -261,7 +261,7 @@ impl Executable {
                 let stringified = remote.url.to_string();
                 let filename = stringified
                     .split('/')
-                    .last()
+                    .next_back()
                     .map(String::from)
                     .unwrap_or_default();
 
@@ -1042,7 +1042,7 @@ fn store_ref_for_url(url: &Url) -> Result<PathBuf, ProcessManagerError> {
     let stringified = url.to_string();
     let filename = stringified
         .split('/')
-        .last()
+        .next_back()
         .map(String::from)
         .unwrap_or_default();
 
