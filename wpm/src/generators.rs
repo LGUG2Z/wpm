@@ -32,51 +32,29 @@ impl Definition {
                     description: Some("Software keyboard remapper".to_string()),
                     requires: None,
                 },
-                resources: None,
+                resources: Some(
+                    [(
+                        String::from("CONFIGURATION_FILE"),
+                        Url::from_str("https://gist.githubusercontent.com/LGUG2Z/bbafc51ddde2bd1462151cfcc3f7f489/raw/28e24c4a493166fa866ae24ebc4ed8df7f164bd1/minimal.clj").unwrap()
+                    )]
+                        .into_iter()
+                        .collect()
+                ),
                 service: Service {
                     kind: ServiceKind::Simple,
                     exec_start: ServiceCommand {
                         executable: Executable::Scoop(ScoopExecutable::Manifest(ScoopManifest {
-                            manifest: Url::from_str("https://raw.githubusercontent.com/ScoopInstaller/Extras/653cfbfc224e40343a49510b2f47dd30c5ca7790/bucket/kanata.json").unwrap(),
+                            manifest: Url::from_str("https://raw.githubusercontent.com/ScoopInstaller/Extras/8a6d8ff0f3963611ae61fd9f45ff36e3c321c8b5/bucket/kanata.json").unwrap(),
                             package: "kanata".to_string(),
-                            version: "1.8.0".to_string(),
+                            version: "1.8.1".to_string(),
                             target: None
                         })),
                         arguments: Some(vec![
                             "-c".to_string(),
-                            "$USERPROFILE/minimal.kbd".to_string(),
+                            "{{ Resources.CONFIGURATION_FILE }}".to_string(),
                             "--port".to_string(),
                             "9999".to_string(),
                         ]),
-                        environment: None,
-                        environment_file: None,
-                    },
-                    environment: None,
-                    environment_file: None,
-                    working_directory: None,
-                    healthcheck: Some(Healthcheck::default()),
-                    restart: Default::default(),
-                    restart_sec: None,
-                    exec_stop: None,
-                    exec_stop_post: None,
-                    autostart: false,
-                    exec_start_pre: None,
-                    exec_start_post: None,
-                },
-            },
-            Self {
-                schema: None,
-                unit: Unit {
-                    name: "masir".to_string(),
-                    description: Some("Focus follows mouse for Windows".to_string()),
-                    requires: Some(vec!["komorebi".to_string()]),
-                },
-                resources: None,
-                service: Service {
-                    kind: ServiceKind::Simple,
-                    exec_start: ServiceCommand {
-                        executable: Executable::Local(PathBuf::from("masir.exe")),
-                        arguments: None,
                         environment: None,
                         environment_file: None,
                     },
@@ -100,7 +78,14 @@ impl Definition {
                     description: Some("Status bar for komorebi".to_string()),
                     requires: Some(vec!["komorebi".to_string()]),
                 },
-                resources: None,
+                resources: Some(
+                    [(
+                        String::from("CONFIGURATION_FILE"),
+                        Url::from_str("https://raw.githubusercontent.com/LGUG2Z/komorebi/refs/tags/v0.1.35/docs/komorebi.bar.example.json").unwrap()
+                    )]
+                        .into_iter()
+                        .collect()
+                ),
                 service: Service {
                     kind: ServiceKind::Simple,
                     environment: Some(vec![(
@@ -108,10 +93,15 @@ impl Definition {
                         "$USERPROFILE/.config/komorebi".to_string(),
                     )]),
                     exec_start: ServiceCommand {
-                        executable: Executable::Local(PathBuf::from("komorebi-bar.exe")),
+                        executable: Executable::Scoop(ScoopExecutable::Manifest(ScoopManifest {
+                            manifest: Url::from_str("https://raw.githubusercontent.com/ScoopInstaller/Extras/8e21dc2cd902b865d153e64a078d97d3cd0593f7/bucket/komorebi.json").unwrap(),
+                            package: "komorebi".to_string(),
+                            version: "0.1.35".to_string(),
+                            target: Some("komorebi-bar.exe".to_string())
+                        })),
                         arguments: Some(vec![
                             "--config".to_string(),
-                            "$USERPROFILE/.config/komorebi/komorebi.bar.json".to_string(),
+                            "{{ Resources.CONFIGURATION_FILE }}".to_string(),
                         ]),
                         environment: None,
                         environment_file: None,
@@ -135,14 +125,26 @@ impl Definition {
                     description: Some("Tiling window management for Windows".to_string()),
                     requires: Some(vec!["whkd".to_string(), "kanata".to_string()]),
                 },
-                resources: None,
+                resources: Some(
+                    [(
+                        String::from("CONFIGURATION_FILE"),
+                        Url::from_str("https://raw.githubusercontent.com/LGUG2Z/komorebi/refs/tags/v0.1.35/docs/komorebi.example.json").unwrap()
+                    )]
+                        .into_iter()
+                        .collect()
+                ),
                 service: Service {
                     kind: ServiceKind::Simple,
                     exec_start: ServiceCommand {
-                        executable: Executable::Local(PathBuf::from("komorebi.exe")),
+                        executable: Executable::Scoop(ScoopExecutable::Manifest(ScoopManifest {
+                            manifest: Url::from_str("https://raw.githubusercontent.com/ScoopInstaller/Extras/8e21dc2cd902b865d153e64a078d97d3cd0593f7/bucket/komorebi.json").unwrap(),
+                            package: "komorebi".to_string(),
+                            version: "0.1.35".to_string(),
+                            target: Some("komorebi.exe".to_string())
+                        })),
                         arguments: Some(vec![
                             "--config".to_string(),
-                            "$USERPROFILE/.config/komorebi/komorebi.json".to_string(),
+                            "{{ Resources.CONFIGURATION_FILE }}".to_string(),
                         ]),
                         environment: Some(vec![(
                             "KOMOREBI_CONFIG_HOME".to_string(),
@@ -175,7 +177,12 @@ impl Definition {
                         environment_file: None,
                     }]),
                     autostart: false,
-                    exec_start_pre: None,
+                    exec_start_pre: Some(vec![ServiceCommand {
+                        executable: Executable::Local(PathBuf::from("komorebic.exe")),
+                        arguments: Some(vec!["fetch-asc".to_string()]),
+                        environment: None,
+                        environment_file: None,
+                    }]),
                     exec_start_post: None,
                 },
             },
@@ -186,12 +193,27 @@ impl Definition {
                     description: Some("Simple hotkey daemon for Windows".to_string()),
                     requires: None,
                 },
-                resources: None,
+                resources: Some(
+                    [(
+                        String::from("CONFIGURATION_FILE"),
+                        Url::from_str("https://raw.githubusercontent.com/LGUG2Z/komorebi/refs/tags/v0.1.35/docs/whkdrc.sample").unwrap()
+                    )]
+                        .into_iter()
+                        .collect()
+                ),
                 service: Service {
                     kind: ServiceKind::Simple,
                     exec_start: ServiceCommand {
-                        executable: Executable::Local(PathBuf::from("whkd.exe")),
-                        arguments: None,
+                        executable: Executable::Scoop(ScoopExecutable::Manifest(ScoopManifest {
+                            manifest: Url::from_str("https://raw.githubusercontent.com/ScoopInstaller/Extras/112fd691392878f8c4e9e9703dde3d1d182941e3/bucket/whkd.json").unwrap(),
+                            package: "whkd".to_string(),
+                            version: "0.2.7".to_string(),
+                            target: None,
+                        })),
+                        arguments: Some(vec![
+                            "--config".to_string(),
+                            "{{ Resources.CONFIGURATION_FILE }}".to_string(),
+                        ]),
                         environment: None,
                         environment_file: None,
                     },
@@ -215,16 +237,23 @@ impl Definition {
                     description: Some("A keyboard driven interface for mouseless mouse manipulation".to_string()),
                     requires: Some(vec!["whkd".to_string(), "kanata".to_string()]),
                 },
-                resources: None,
+                resources: Some(
+                    [(
+                        String::from("CONFIGURATION_FILE"),
+                        Url::from_str("https://raw.githubusercontent.com/petoncle/mousemaster/refs/tags/73/configuration/neo-mousekeys-ijkl.properties").unwrap()
+                    )]
+                        .into_iter()
+                        .collect()
+                ),
                 service: Service {
                     kind: ServiceKind::Simple,
                     exec_start: ServiceCommand {
                         executable: Executable::Remote(RemoteExecutable {
-                            url: Url::from_str("https://github.com/petoncle/mousemaster/releases/download/69/mousemaster.exe").unwrap(),
-                            hash: "fb01d97beaa9b84ce312e5c5fe2976124c5cb4316a10b4541f985566731a36ab".to_string()
+                            url: Url::from_str("https://github.com/petoncle/mousemaster/releases/download/73/mousemaster.exe").unwrap(),
+                            hash: "7b696461e128aec9cc50d187d8656123a6e7a4e6b1d9ec1dbe504ad2de3cad25".to_string()
                         }),
                         arguments: Some(vec![
-                            "--configuration-file=$USERPROFILE/Downloads/mousemaster.properties".to_string(),
+                            "--configuration-file={{ Resources.CONFIGURATION_FILE }}".to_string(),
                             "--pause-on-error=false".to_string(),
                         ]),
                         environment: None,
@@ -253,16 +282,28 @@ impl Definition {
                     description: Some("Automatic application-aware keyboard layer switching for Windows".to_string()),
                     requires: Some(vec!["komorebi".to_string(), "kanata".to_string()]),
                 },
-                resources: None,
+                resources: Some(
+                    [(
+                        String::from("CONFIGURATION_FILE"),
+                        Url::from_str("https://raw.githubusercontent.com/LGUG2Z/komokana/refs/tags/v0.1.5/komokana.example.yaml").unwrap()
+                    )]
+                        .into_iter()
+                        .collect()
+                ),
                 service: Service {
                     kind: ServiceKind::Simple,
                     exec_start: ServiceCommand {
-                        executable: Executable::Local(PathBuf::from("komokana.exe")),
+                        executable: Executable::Scoop(ScoopExecutable::Manifest(ScoopManifest {
+                            manifest: Url::from_str("https://raw.githubusercontent.com/ScoopInstaller/Extras/e633292b4e1101273caac59ffcb4a7ce7ee7a2e8/bucket/komokana.json").unwrap(),
+                            package: "komokana".to_string(),
+                            version: "0.1.5".to_string(),
+                            target: None,
+                        })),
                         arguments: Some(vec![
                             "--kanata-port".to_string(),
                             "9999".to_string(),
                             "--configuration".to_string(),
-                            "$USERPROFILE/komokana.yaml".to_string(),
+                            "{{ Resources.CONFIGURATION_FILE }}".to_string(),
                             "--default-layer".to_string(),
                             "qwerty".to_string()
                         ]),
@@ -277,7 +318,7 @@ impl Definition {
                     restart_sec: Some(2),
                     exec_stop: None,
                     exec_stop_post: None,
-                    autostart: true,
+                    autostart: false,
                     exec_start_pre: None,
                     exec_start_post: None,
                 },
@@ -309,7 +350,7 @@ impl Definition {
                     restart_sec: None,
                     exec_stop: None,
                     exec_stop_post: None,
-                    autostart: true,
+                    autostart: false,
                     exec_start_pre: None,
                     exec_start_post: None,
                 },

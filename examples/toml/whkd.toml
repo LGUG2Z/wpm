@@ -2,13 +2,24 @@
 Name = "whkd"
 Description = "Simple hotkey daemon for Windows"
 
+[Resources]
+CONFIGURATION_FILE = "https://raw.githubusercontent.com/LGUG2Z/komorebi/refs/tags/v0.1.35/docs/whkdrc.sample"
+
 [Service]
 Kind = "Simple"
 Restart = "OnFailure"
 RestartSec = 2
 
 [Service.ExecStart]
-Executable = "whkd.exe"
+Arguments = [
+    "--config",
+    "{{ Resources.CONFIGURATION_FILE }}",
+]
+
+[Service.ExecStart.Executable]
+Package = "whkd"
+Version = "0.2.7"
+Manifest = "https://raw.githubusercontent.com/ScoopInstaller/Extras/112fd691392878f8c4e9e9703dde3d1d182941e3/bucket/whkd.json"
 
 [Service.Healthcheck.Process]
 DelaySec = 1

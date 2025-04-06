@@ -6,6 +6,9 @@ Requires = [
     "kanata",
 ]
 
+[Resources]
+CONFIGURATION_FILE = "https://raw.githubusercontent.com/petoncle/mousemaster/refs/tags/73/configuration/neo-mousekeys-ijkl.properties"
+
 [Service]
 Kind = "Simple"
 Restart = "OnFailure"
@@ -13,13 +16,13 @@ RestartSec = 2
 
 [Service.ExecStart]
 Arguments = [
-    "--configuration-file=$USERPROFILE/Downloads/mousemaster.properties",
+    "--configuration-file={{ Resources.CONFIGURATION_FILE }}",
     "--pause-on-error=false",
 ]
 
 [Service.ExecStart.Executable]
-Url = "https://github.com/petoncle/mousemaster/releases/download/69/mousemaster.exe"
-Hash = "fb01d97beaa9b84ce312e5c5fe2976124c5cb4316a10b4541f985566731a36ab"
+Url = "https://github.com/petoncle/mousemaster/releases/download/73/mousemaster.exe"
+Hash = "7b696461e128aec9cc50d187d8656123a6e7a4e6b1d9ec1dbe504ad2de3cad25"
 
 [Service.Healthcheck.Process]
 DelaySec = 2

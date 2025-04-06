@@ -9,7 +9,6 @@ Requires = [
 
 [Service]
 Kind = "Oneshot"
-Autostart = true
 Restart = "Never"
 
 [Service.ExecStart]

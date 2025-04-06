@@ -4,17 +4,20 @@
     "Name": "kanata",
     "Description": "Software keyboard remapper"
   },
+  "Resources": {
+    "CONFIGURATION_FILE": "https://gist.githubusercontent.com/LGUG2Z/bbafc51ddde2bd1462151cfcc3f7f489/raw/28e24c4a493166fa866ae24ebc4ed8df7f164bd1/minimal.clj"
+  },
   "Service": {
     "Kind": "Simple",
     "ExecStart": {
       "Executable": {
         "Package": "kanata",
-        "Version": "1.8.0",
-        "Manifest": "https://raw.githubusercontent.com/ScoopInstaller/Extras/653cfbfc224e40343a49510b2f47dd30c5ca7790/bucket/kanata.json"
+        "Version": "1.8.1",
+        "Manifest": "https://raw.githubusercontent.com/ScoopInstaller/Extras/8a6d8ff0f3963611ae61fd9f45ff36e3c321c8b5/bucket/kanata.json"
       },
       "Arguments": [
         "-c",
-        "$USERPROFILE/minimal.kbd",
+        "{{ Resources.CONFIGURATION_FILE }}",
         "--port",
         "9999"
       ]

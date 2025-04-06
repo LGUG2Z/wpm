@@ -8,16 +8,22 @@
       "kanata"
     ]
   },
+  "Resources": {
+    "CONFIGURATION_FILE": "https://raw.githubusercontent.com/LGUG2Z/komokana/refs/tags/v0.1.5/komokana.example.yaml"
+  },
   "Service": {
     "Kind": "Simple",
-    "Autostart": true,
     "ExecStart": {
-      "Executable": "komokana.exe",
+      "Executable": {
+        "Package": "komokana",
+        "Version": "0.1.5",
+        "Manifest": "https://raw.githubusercontent.com/ScoopInstaller/Extras/e633292b4e1101273caac59ffcb4a7ce7ee7a2e8/bucket/komokana.json"
+      },
       "Arguments": [
         "--kanata-port",
         "9999",
         "--configuration",
-        "$USERPROFILE/komokana.yaml",
+        "{{ Resources.CONFIGURATION_FILE }}",
         "--default-layer",
         "qwerty"
       ]

@@ -8,13 +8,29 @@
       "kanata"
     ]
   },
+  "Resources": {
+    "CONFIGURATION_FILE": "https://raw.githubusercontent.com/LGUG2Z/komorebi/refs/tags/v0.1.35/docs/komorebi.example.json"
+  },
   "Service": {
     "Kind": "Simple",
+    "ExecStartPre": [
+      {
+        "Executable": "komorebic.exe",
+        "Arguments": [
+          "fetch-asc"
+        ]
+      }
+    ],
     "ExecStart": {
-      "Executable": "komorebi.exe",
+      "Executable": {
+        "Package": "komorebi",
+        "Version": "0.1.35",
+        "Manifest": "https://raw.githubusercontent.com/ScoopInstaller/Extras/8e21dc2cd902b865d153e64a078d97d3cd0593f7/bucket/komorebi.json",
+        "Target": "komorebi.exe"
+      },
       "Arguments": [
         "--config",
-        "$USERPROFILE/.config/komorebi/komorebi.json"
+        "{{ Resources.CONFIGURATION_FILE }}"
       ],
       "Environment": [
         [

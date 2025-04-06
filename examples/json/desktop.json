@@ -9,9 +9,9 @@
       "mousemaster"
     ]
   },
+  "Resources": null,
   "Service": {
     "Kind": "Oneshot",
-    "Autostart": true,
     "ExecStart": {
       "Executable": "msg.exe",
       "Arguments": [
