@@ -1,0 +1,64 @@
+copyright: Copyright &copy; 2024-Present LGUG2Z
+use_directory_urls: false
+site_name: wpm
+site_description: Windows Process Manager
+repo_url: https://github.com/LGUG2Z/wpm
+repo_name: LGUG2Z/wpm
+docs_dir: docs
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  features:
+    - content.action.edit
+    - content.action.view
+    - content.code.copy
+    - content.tabs.link
+    - navigation.footer
+    - navigation.indexes
+    - navigation.sections
+    # - navigation.tabs
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+plugins:
+  - macros
+  - search
+
+nav:
+  - About:
+      - wpm: index.md
+  - Getting started:
+      - Installation: installation.md
+      - Tutorial: tutorial.md
+  - Configuration reference:
+    - JSONSchema: https://wpm.lgug2z.com/schema
+  - CLI reference:
+    - cli/start.md
+    - cli/stop.md
+    - cli/restart.md
+    - cli/reset.md
+    - cli/state.md
+    - cli/status.md
+    - cli/reload.md
+    - cli/log.md
+    - cli/rebuild.md
+    - cli/units.md
