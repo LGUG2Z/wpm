@@ -23,7 +23,7 @@ impl Definition {
         serde_json::to_string_pretty(&schema).unwrap()
     }
 
-    pub fn examplegen() {
+    pub fn examplegen(path: Option<PathBuf>) {
         let examples = vec![
             Self {
                 schema: None,
@@ -357,9 +357,20 @@ impl Definition {
             },
         ];
 
-        for format in ["json", "toml"] {
-            let parent = Path::new("examples").join(format);
-            std::fs::create_dir_all(&parent).unwrap();
+        let formats = if path.is_some() {
+            vec!["json"]
+        } else {
+            vec!["json", "toml"]
+        };
+
+        for format in formats {
+            let parent = if let Some(path) = &path {
+                path
+            } else {
+                &Path::new("examples").join(format)
+            };
+
+            std::fs::create_dir_all(parent).unwrap();
 
             for example in &examples {
                 match format {

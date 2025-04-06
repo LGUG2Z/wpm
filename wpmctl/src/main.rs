@@ -12,6 +12,7 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
+use std::path::PathBuf;
 use wpm::communication::send_message;
 use wpm::process_manager::ProcessManager;
 use wpm::unit::Definition;
@@ -63,6 +64,12 @@ struct Log {
 }
 
 #[derive(Parser)]
+struct Examplegen {
+    /// Target path
+    path: Option<PathBuf>,
+}
+
+#[derive(Parser)]
 enum SubCommand {
     /// Generate a CLI command documentation
     #[clap(hide = true)]
@@ -72,7 +79,7 @@ enum SubCommand {
     Schemagen,
     /// Generate some example wpm units
     #[clap(hide = true)]
-    Examplegen,
+    Examplegen(Examplegen),
     /// Start units
     #[clap(arg_required_else_help = true)]
     Start(Start),
@@ -153,8 +160,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         SubCommand::Schemagen => {
             println!("{}", Definition::schemagen());
         }
-        SubCommand::Examplegen => {
-            Definition::examplegen();
+        SubCommand::Examplegen(args) => {
+            Definition::examplegen(args.path);
         }
         SubCommand::Start(args) => {
             send_message("wpmd.sock", SocketMessage::Start(args.units))?;
