@@ -54,6 +54,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::set_var("RUST_LOG", "info");
     }
 
+    println!("Thank you for using wpm!\n");
+    println!("# Commercial Use License");
+    println!("* View licensing options https://lgug2z.com/software/wpm - A commercial use license is required to use wpm at work");
+    println!("\n# Personal Use Sponsorship");
+    println!(
+        "* Become a sponsor https://github.com/sponsors/LGUG2Z - $5/month makes a big difference"
+    );
+    println!("* Leave a tip https://ko-fi.com/lgug2z - An alternative to GitHub Sponsors");
+    println!("\n# Community");
+    println!("* Join the Discord https://discord.gg/mGkn66PHkx - Chat, ask questions, get help");
+    println!(
+        "* Subscribe to https://youtube.com/@LGUG2Z - Development videos, feature previews and release overviews"
+    );
+    println!("\n# Documentation");
+    println!("* Read the docs https://lgug2z.github.io/wpm\n");
+
     let appender = tracing_appender::rolling::daily(std::env::temp_dir(), "wpmd_plaintext.log");
     let color_appender = tracing_appender::rolling::daily(std::env::temp_dir(), "wpmd.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(appender);
