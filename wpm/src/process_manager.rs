@@ -156,7 +156,7 @@ impl ProcessManager {
         None
     }
 
-    pub fn init() -> Result<Self, ProcessManagerError> {
+    pub fn init(path: Option<PathBuf>) -> Result<Self, ProcessManagerError> {
         let mut pm = ProcessManager {
             definitions: Default::default(),
             running: Arc::new(Default::default()),
@@ -165,7 +165,7 @@ impl ProcessManager {
             terminated: Arc::new(Default::default()),
         };
 
-        pm.load_units()?;
+        pm.load_units(path)?;
         pm.autostart();
 
         Ok(pm)
@@ -188,8 +188,14 @@ impl ProcessManager {
         }
     }
 
-    pub fn retrieve_units() -> Result<Vec<Definition>, ProcessManagerError> {
-        let read_dir = std::fs::read_dir(Self::unit_directory())?;
+    pub fn retrieve_units(path: Option<PathBuf>) -> Result<Vec<Definition>, ProcessManagerError> {
+        let unit_dir = if let Some(path) = path {
+            path
+        } else {
+            Self::unit_directory()
+        };
+
+        let read_dir = std::fs::read_dir(unit_dir)?;
 
         let mut paths = vec![];
 
@@ -226,8 +232,14 @@ impl ProcessManager {
         Ok(units)
     }
 
-    pub fn load_units(&mut self) -> Result<(), ProcessManagerError> {
-        let read_dir = std::fs::read_dir(Self::unit_directory())?;
+    pub fn load_units(&mut self, path: Option<PathBuf>) -> Result<(), ProcessManagerError> {
+        let unit_dir = if let Some(path) = path {
+            path
+        } else {
+            Self::unit_directory()
+        };
+
+        let read_dir = std::fs::read_dir(unit_dir)?;
 
         let mut units = vec![];
 

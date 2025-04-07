@@ -70,6 +70,18 @@ struct Examplegen {
 }
 
 #[derive(Parser)]
+struct Reload {
+    /// Target path
+    path: Option<PathBuf>,
+}
+
+#[derive(Parser)]
+struct Rebuild {
+    /// Target path
+    path: Option<PathBuf>,
+}
+
+#[derive(Parser)]
 enum SubCommand {
     /// Generate a CLI command documentation
     #[clap(hide = true)]
@@ -98,11 +110,11 @@ enum SubCommand {
     #[clap(arg_required_else_help = true)]
     Status(Status),
     /// Reload all unit definitions
-    Reload,
+    Reload(Reload),
     /// Tail the logs of a unit or of the process manager
     Log(Log),
     /// Ensure all remote dependencies are downloaded and built
-    Rebuild,
+    Rebuild(Rebuild),
     /// Print the path to the wpm global unit definition directory
     Units,
 }
@@ -184,8 +196,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             send_message("wpmd.sock", SocketMessage::State)?;
             println!("{}", listen_for_response()?);
         }
-        SubCommand::Reload => {
-            send_message("wpmd.sock", SocketMessage::Reload)?;
+        SubCommand::Reload(args) => {
+            send_message("wpmd.sock", SocketMessage::Reload(args.path))?;
         }
         SubCommand::Log(args) => match args.unit {
             None => {
@@ -210,8 +222,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         },
-        SubCommand::Rebuild => {
-            let mut units = ProcessManager::retrieve_units()?;
+        SubCommand::Rebuild(args) => {
+            let mut units = ProcessManager::retrieve_units(args.path)?;
             for definition in &mut units {
                 let name = &definition.unit.name;
                 let executable = &definition.service.exec_start.executable;

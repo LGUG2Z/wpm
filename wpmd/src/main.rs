@@ -9,6 +9,7 @@ use interprocess::local_socket::ToNsName;
 use parking_lot::Mutex;
 use std::io::BufRead;
 use std::io::BufReader;
+use std::path::PathBuf;
 use std::process::exit;
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -29,7 +30,10 @@ static SOCKET_NAME: &str = "wpmd.sock";
 
 #[derive(Parser)]
 #[clap(author, about, version = build::CLAP_LONG_VERSION)]
-struct Opts;
+struct Args {
+    /// Path to unit files (default: $Env:USERPROFILE/.config/wpm)
+    path: Option<PathBuf>,
+}
 
 #[derive(Error, Debug)]
 pub enum WpmdError {
@@ -42,7 +46,7 @@ pub enum WpmdError {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let _opts: Opts = Opts::parse();
+    let args: Args = Args::parse();
 
     if std::env::var("RUST_LIB_BACKTRACE").is_err() {
         std::env::set_var("RUST_LIB_BACKTRACE", "1");
@@ -91,7 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ),
     )?;
 
-    {
+    if args.path.is_none() {
         let mut system = System::new_all();
         system.refresh_processes(ProcessesToUpdate::All, true);
         let matched_procs: Vec<&Process> = system.processes_by_name("wpmd.exe".as_ref()).collect();
@@ -112,7 +116,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let process_manager = ProcessManager::init()?;
+    let process_manager = ProcessManager::init(args.path)?;
 
     let process_manager_arc = Arc::new(Mutex::new(process_manager));
     let loop_arc = process_manager_arc.clone();
@@ -227,8 +231,8 @@ fn handle_socket_message(
             let table = format!("{}\n", pm.state().as_table());
             send_str("wpmctl.sock", &table)?;
         }
-        SocketMessage::Reload => {
-            pm.load_units()?;
+        SocketMessage::Reload(arg) => {
+            pm.load_units(arg)?;
         }
         SocketMessage::Reset(arg) => {
             for name in arg {

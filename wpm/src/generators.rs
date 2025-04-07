@@ -250,7 +250,7 @@ impl Definition {
                     exec_start: ServiceCommand {
                         executable: Executable::Remote(RemoteExecutable {
                             url: Url::from_str("https://github.com/petoncle/mousemaster/releases/download/73/mousemaster.exe").unwrap(),
-                            hash: "7b696461e128aec9cc50d187d8656123a6e7a4e6b1d9ec1dbe504ad2de3cad25".to_string()
+                            hash: "55009596854109e0e7fb6ded3f5a1098e4ab211bed8e3d975d81c4bd8a849aa5".to_string()
                         }),
                         arguments: Some(vec![
                             "--configuration-file={{ Resources.CONFIGURATION_FILE }}".to_string(),

@@ -77,7 +77,7 @@ pub enum SocketMessage {
     Stop(Vec<String>),
     Status(String),
     State,
-    Reload,
+    Reload(Option<PathBuf>),
     Reset(Vec<String>),
     Restart(Vec<String>),
 }
