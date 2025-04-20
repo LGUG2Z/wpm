@@ -219,7 +219,10 @@ fn handle_socket_message(
         }
         SocketMessage::Restart(arg) => {
             for name in arg {
-                pm.stop(&name)?;
+                if let Err(error) = pm.stop(&name) {
+                    tracing::warn!("{error}");
+                }
+
                 pm.start(&name)?;
             }
         }
