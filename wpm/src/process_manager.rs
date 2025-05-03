@@ -508,20 +508,36 @@ impl ProcessManager {
             }
         }
 
-        let id = definition.execute(
-            self.running.clone(),
-            self.completed.clone(),
-            self.terminated.clone(),
-        )?;
+        let mut retry_limit = definition.service.exec_start.retry_limit.unwrap_or(5);
+        let mut process_id = None;
+        while retry_limit > 0 {
+            let id = definition.execute(
+                self.running.clone(),
+                self.completed.clone(),
+                self.terminated.clone(),
+            )?;
 
-        definition.healthcheck(
-            id.clone(),
-            self.running.clone(),
-            self.failed.clone(),
-            self.terminated.clone(),
-        )?;
+            match definition.healthcheck(
+                id.clone(),
+                self.running.clone(),
+                self.failed.clone(),
+                self.terminated.clone(),
+            ) {
+                Ok(_) => {
+                    process_id = Some(id);
+                    break;
+                }
+                Err(error) => {
+                    retry_limit -= 1;
+                    if retry_limit == 0 {
+                        return Err(error);
+                    }
+                }
+            }
+        }
 
-        Ok(id)
+        #[allow(clippy::unwrap_used)]
+        Ok(process_id.unwrap())
     }
 
     pub fn stop(&mut self, name: &str) -> Result<(), ProcessManagerError> {

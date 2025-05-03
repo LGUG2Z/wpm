@@ -131,6 +131,9 @@ pub struct ServiceCommand {
     /// Path to an environment file, containing environment variables for this command
     #[serde(skip_serializing_if = "Option::is_none")]
     pub environment_file: Option<PathBuf>,
+    /// The maximum number of retries for ExecStart (default: 5)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry_limit: Option<u8>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
