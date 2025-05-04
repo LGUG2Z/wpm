@@ -48,7 +48,15 @@ gen_unit_subcommands! {
     Start,
     Stop,
     Reset,
-    Restart
+}
+
+#[derive(clap::Parser)]
+pub struct Restart {
+    /// Target units
+    units: Vec<String>,
+    #[clap(long, short = 'd', action)]
+    /// Restart dependents of target units
+    with_dependents: bool,
 }
 
 #[derive(Parser)]
@@ -182,7 +190,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             send_message("wpmd.sock", SocketMessage::Stop(args.units))?;
         }
         SubCommand::Restart(args) => {
-            send_message("wpmd.sock", SocketMessage::Restart(args.units))?;
+            if args.with_dependents {
+                send_message(
+                    "wpmd.sock",
+                    SocketMessage::RestartWithDependents(args.units),
+                )?;
+            } else {
+                send_message("wpmd.sock", SocketMessage::Restart(args.units))?;
+            }
         }
         SubCommand::Reset(args) => {
             send_message("wpmd.sock", SocketMessage::Reset(args.units))?;

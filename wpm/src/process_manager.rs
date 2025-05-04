@@ -654,6 +654,19 @@ impl ProcessManager {
         self.definitions.get(name).cloned()
     }
 
+    pub fn dependents(&self, name: &str) -> Vec<String> {
+        let mut dependents = vec![];
+        for (def_name, def) in &self.definitions {
+            if let Some(dependencies) = &def.unit.requires {
+                if dependencies.contains(&name.to_string()) {
+                    dependents.push(def_name.to_string());
+                }
+            }
+        }
+
+        dependents
+    }
+
     pub fn state(&self) -> ProcessManagerStatus {
         let mut units = vec![];
         let running = self.running.lock();
