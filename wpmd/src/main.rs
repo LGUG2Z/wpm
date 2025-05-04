@@ -22,6 +22,7 @@ use tracing_subscriber::EnvFilter;
 use wpm::communication::send_str;
 use wpm::process_manager::ProcessManager;
 use wpm::process_manager::ProcessManagerError;
+use wpm::unit_status::UnitState;
 use wpm::SocketMessage;
 
 shadow_rs::shadow!(build);
@@ -224,6 +225,30 @@ fn handle_socket_message(
                 }
 
                 pm.start(&name)?;
+            }
+        }
+        SocketMessage::RestartWithDependents(arg) => {
+            for name in arg {
+                if let Err(error) = pm.stop(&name) {
+                    tracing::warn!("{error}");
+                }
+
+                pm.start(&name)?;
+
+                for dependent in pm.dependents(&name) {
+                    for (definition, status) in pm.state().0 {
+                        if definition.unit.name.eq(&dependent)
+                            && matches!(status.state, UnitState::Running)
+                        {
+                            tracing::info!("{dependent}: restarting as a dependent of {name}");
+                            if let Err(error) = pm.stop(&dependent) {
+                                tracing::warn!("{error}");
+                            }
+
+                            pm.start(&dependent)?;
+                        }
+                    }
+                }
             }
         }
         SocketMessage::Status(arg) => {

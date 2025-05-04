@@ -12,7 +12,7 @@ mod generators;
 pub mod process_manager;
 mod process_manager_status;
 pub mod unit;
-mod unit_status;
+pub mod unit_status;
 
 static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 static REQWEST_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
@@ -80,4 +80,5 @@ pub enum SocketMessage {
     Reload(Option<PathBuf>),
     Reset(Vec<String>),
     Restart(Vec<String>),
+    RestartWithDependents(Vec<String>),
 }
