@@ -99,9 +99,9 @@ impl Child {
                 );
 
                 if let Some(process) = system.process(pid) {
-                    process.wait().ok_or_else(|| {
-                        std::io::Error::new(std::io::ErrorKind::Other, "Process wait returned None")
-                    })
+                    process
+                        .wait()
+                        .ok_or_else(|| std::io::Error::other("Process wait returned None"))
                 } else {
                     Err(std::io::Error::new(
                         std::io::ErrorKind::NotFound,
