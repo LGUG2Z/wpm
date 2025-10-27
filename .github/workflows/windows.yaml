@@ -61,7 +61,7 @@ jobs:
       - run: |
           cargo install cargo-wix
           cargo wix --no-build -p wpm --nocapture -I .\wix\main.wxs --target ${{ matrix.platform.target }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: wpm-${{ matrix.platform.target }}-${{ github.sha }}
           path: |
