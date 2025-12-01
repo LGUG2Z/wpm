@@ -22,4 +22,4 @@ sha256 = "1"
 
 schemars = { version = "0.8", features = ["url"] }
 tabled = { version = "0.18", features = ["derive"] }
-toml = "0.8"
+toml = "0.9"
