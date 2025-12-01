@@ -10,7 +10,7 @@ interprocess = { workspace = true }
 parking_lot = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde-envfile = "0.2"
+serde-envfile = "0.3"
 shared_child = "1"
 sysinfo = { workspace = true }
 thiserror = { workspace = true }
